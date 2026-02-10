@@ -1,0 +1,21 @@
+struct Node:
+    value: i32
+    next: Option[Box[Node]]
+
+struct LinkedList:
+    head: Option[Box[Node]]
+
+impl LinkedList:
+    def push(mut self, val: i32):
+        let new_node = Node(val, move self.head)
+        self.head = Some(new_node)
+
+def main():
+    mut list = LinkedList(None)
+    list.push(10)
+    
+    match list.head:
+        Some(node):
+            $print("Head value: {node.value}")
+        None:
+            $print("List is empty")

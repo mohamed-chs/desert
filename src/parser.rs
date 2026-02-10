@@ -157,6 +157,10 @@ fn primary_expression(input: &[TokenSpan]) -> ParseResult<'_, Expression> {
         let (rest, expr) = expression(rest)?;
         return Ok((rest, Expression::UniqueRef(Box::new(expr))));
     }
+    if let Ok((rest, _)) = token(Token::Move)(input) {
+        let (rest, expr) = expression(rest)?;
+        return Ok((rest, Expression::Move(Box::new(expr))));
+    }
     if let Ok((rest, name)) = ident(input) {
         let mut current_input = rest;
         let mut expr = Expression::Ident(name);
@@ -169,36 +173,54 @@ fn primary_expression(input: &[TokenSpan]) -> ParseResult<'_, Expression> {
                 continue;
             }
             if let Ok((next_input, _)) = token(Token::LBracket)(current_input) {
-                 let mut types = Vec::new();
-                 let mut inner_input = next_input;
-                 while let Ok((next_input, ty)) = parse_type(inner_input) {
-                     types.push(ty);
-                     inner_input = next_input;
-                     if let Ok((next_input, _)) = token(Token::Comma)(inner_input) {
-                         inner_input = next_input;
-                     } else {
-                         break;
-                     }
-                 }
-                 if let Ok((next_input, _)) = token(Token::RBracket)(inner_input) {
-                     if let Ok((next_input, _)) = token(Token::LParen)(next_input) {
-                         let mut args = Vec::new();
-                         let mut arg_input = next_input;
-                         while let Ok((next_input, arg)) = expression(arg_input) {
-                             args.push(arg);
-                             arg_input = next_input;
-                             if let Ok((next_input, _)) = token(Token::Comma)(arg_input) {
-                                 arg_input = next_input;
-                             } else {
-                                 break;
-                             }
-                         }
-                         let (final_input, _) = token(Token::RParen)(arg_input)?;
-                         expr = Expression::GenericCall(Box::new(expr), types, args);
-                         current_input = final_input;
-                         continue;
-                     }
-                 }
+                // Try GenericCall first
+                let mut types = Vec::new();
+                let mut inner_input = next_input;
+                let mut generic_call_parsed = false;
+                
+                while let Ok((next_input, ty)) = parse_type(inner_input) {
+                    types.push(ty);
+                    inner_input = next_input;
+                    if let Ok((next_input, _)) = token(Token::Comma)(inner_input) {
+                        inner_input = next_input;
+                    } else {
+                        break;
+                    }
+                }
+                
+                if !types.is_empty() {
+                    if let Ok((after_bracket, _)) = token(Token::RBracket)(inner_input) {
+                        if let Ok((after_paren, _)) = token(Token::LParen)(after_bracket) {
+                            let mut args = Vec::new();
+                            let mut arg_input = after_paren;
+                            while let Ok((next_input, arg)) = expression(arg_input) {
+                                args.push(arg);
+                                arg_input = next_input;
+                                if let Ok((next_input, _)) = token(Token::Comma)(arg_input) {
+                                    arg_input = next_input;
+                                } else {
+                                    break;
+                                }
+                            }
+                            let (final_input, _) = token(Token::RParen)(arg_input)?;
+                            expr = Expression::GenericCall(Box::new(expr), types, args);
+                            current_input = final_input;
+                            generic_call_parsed = true;
+                        }
+                    }
+                }
+                
+                if generic_call_parsed {
+                    continue;
+                }
+                
+                // If not a GenericCall, try Indexing
+                if let Ok((inner_input, index_expr)) = expression(next_input) {
+                    let (final_input, _) = token(Token::RBracket)(inner_input)?;
+                    expr = Expression::Index(Box::new(expr), Box::new(index_expr));
+                    current_input = final_input;
+                    continue;
+                }
             }
             if let Ok((next_input, _)) = token(Token::LParen)(current_input) {
                 let mut args = Vec::new();
@@ -228,6 +250,16 @@ fn primary_expression(input: &[TokenSpan]) -> ParseResult<'_, Expression> {
                 let (final_input, _) = token(Token::RParen)(arg_input)?;
                 expr = Expression::Call(Box::new(expr), args);
                 current_input = final_input;
+                continue;
+            }
+            if let Ok((next_input, _)) = token(Token::Question)(current_input) {
+                expr = Expression::Question(Box::new(expr));
+                current_input = next_input;
+                continue;
+            }
+            if let Ok((next_input, _)) = token(Token::BangBang)(current_input) {
+                expr = Expression::Unwrap(Box::new(expr));
+                current_input = next_input;
                 continue;
             }
             break;
@@ -335,6 +367,37 @@ fn mut_statement(input: &[TokenSpan]) -> ParseResult<'_, StatementKind> {
     Ok((input, StatementKind::Mut { name, ty, value }))
 }
 
+fn ref_statement(input: &[TokenSpan]) -> ParseResult<'_, StatementKind> {
+    let (input, _) = token(Token::Ref)(input)?;
+    let (input, name) = ident(input)?;
+    let mut current_input = input;
+    let mut ty = None;
+    if let Ok((next_input, _)) = token(Token::Colon)(current_input) {
+        let (next_input, t) = parse_type(next_input)?;
+        ty = Some(t);
+        current_input = next_input;
+    }
+    let (input, _) = token(Token::Assign)(current_input)?;
+    let (input, value) = expression(input)?;
+    Ok((input, StatementKind::Ref { name, ty, value }))
+}
+
+fn mut_ref_statement(input: &[TokenSpan]) -> ParseResult<'_, StatementKind> {
+    let (input, _) = token(Token::Mut)(input)?;
+    let (input, _) = token(Token::Ref)(input)?;
+    let (input, name) = ident(input)?;
+    let mut current_input = input;
+    let mut ty = None;
+    if let Ok((next_input, _)) = token(Token::Colon)(current_input) {
+        let (next_input, t) = parse_type(next_input)?;
+        ty = Some(t);
+        current_input = next_input;
+    }
+    let (input, _) = token(Token::Assign)(current_input)?;
+    let (input, value) = expression(input)?;
+    Ok((input, StatementKind::MutRef { name, ty, value }))
+}
+
 fn block(input: &[TokenSpan]) -> ParseResult<'_, Vec<Statement>> {
     let (input, _) = token(Token::Indent)(input)?;
     let mut statements = Vec::new();
@@ -358,18 +421,29 @@ fn def_statement(input: &[TokenSpan]) -> ParseResult<'_, StatementKind> {
     
     let mut params = Vec::new();
     let mut current_input = input;
-    while let Ok((next_input, p_name)) = ident(current_input) {
-        let mut p_ty = None;
-        let mut inner_input = next_input;
-        if let Ok((next_input, _)) = token(Token::Colon)(inner_input) {
-            let (next_input, ty) = parse_type(next_input)?;
-            p_ty = Some(ty);
-            inner_input = next_input;
+    while let Some(((first_token, _), _)) = current_input.split_first() {
+        let mut is_mut = false;
+        let mut inner_input = current_input;
+        if *first_token == Token::Mut {
+            is_mut = true;
+            inner_input = &current_input[1..];
         }
-        params.push(Param { name: p_name, ty: p_ty });
-        current_input = inner_input;
-        if let Ok((next_input, _)) = token(Token::Comma)(current_input) {
-            current_input = next_input;
+        
+        if let Ok((next_input, p_name)) = ident(inner_input) {
+            let mut p_ty = None;
+            let mut inner_input = next_input;
+            if let Ok((next_input, _)) = token(Token::Colon)(inner_input) {
+                let (next_input, ty) = parse_type(next_input)?;
+                p_ty = Some(ty);
+                inner_input = next_input;
+            }
+            params.push(Param { name: p_name, ty: p_ty, is_mut });
+            current_input = inner_input;
+            if let Ok((next_input, _)) = token(Token::Comma)(current_input) {
+                current_input = next_input;
+            } else {
+                break;
+            }
         } else {
             break;
         }
@@ -427,7 +501,7 @@ fn struct_statement(input: &[TokenSpan]) -> ParseResult<'_, StatementKind> {
     while let Ok((next_input, f_name)) = ident(current_input) {
         let (next_input, _) = token(Token::Colon)(next_input)?;
         let (next_input, f_ty) = parse_type(next_input)?;
-        fields.push(Param { name: f_name, ty: Some(f_ty) });
+        fields.push(Param { name: f_name, ty: Some(f_ty), is_mut: false });
         current_input = next_input;
     }
     
@@ -474,16 +548,47 @@ fn pyimport_statement(input: &[TokenSpan]) -> ParseResult<'_, StatementKind> {
     let (input, _) = token(Token::Colon)(input)?;
     let (input, _) = token(Token::Indent)(input)?;
     
-    // For now, just collect all tokens until Dedent
+    // Collect all tokens until Dedent
     let mut current_input = input;
-    while let Some(((t, _), _)) = current_input.split_first() {
+    let mut content = String::new();
+    let mut first = true;
+    while let Some(((t, _), next_tokens)) = current_input.split_first() {
         if *t == Token::Dedent {
             break;
         }
-        current_input = &current_input[1..];
+        if !first {
+            content.push(' ');
+        }
+        content.push_str(&format!("{:?}", t)); // placeholder for actual reconstruction
+        current_input = next_tokens;
+        first = false;
     }
     let (input, _) = token(Token::Dedent)(current_input)?;
-    Ok((input, StatementKind::PyImport("TODO: PyO3 integration".to_string())))
+    Ok((input, StatementKind::PyImport(content)))
+}
+
+fn match_statement(input: &[TokenSpan]) -> ParseResult<'_, StatementKind> {
+    let (input, _) = token(Token::Match)(input)?;
+    let (input, expr) = expression(input)?;
+    let (input, _) = token(Token::Colon)(input)?;
+    let (input, _) = token(Token::Indent)(input)?;
+    
+    let mut arms = Vec::new();
+    let mut current_input = input;
+    
+    while let Ok((next_input, pattern)) = expression(current_input) {
+        let (next_input, _) = token(Token::Colon)(next_input)?;
+        let (next_input, body) = block(next_input)?;
+        arms.push((pattern, body));
+        current_input = next_input;
+        
+        if let Some(((Token::Dedent, _), _)) = current_input.split_first() {
+            break;
+        }
+    }
+    
+    let (input, _) = token(Token::Dedent)(current_input)?;
+    Ok((input, StatementKind::Match { expression: expr, arms }))
 }
 
 fn for_statement(input: &[TokenSpan]) -> ParseResult<'_, StatementKind> {
@@ -503,6 +608,10 @@ fn statement(input: &[TokenSpan]) -> ParseResult<'_, Statement> {
         (rest, kind)
     } else if let Ok((rest, kind)) = mut_statement(input) {
         (rest, kind)
+    } else if let Ok((rest, kind)) = ref_statement(input) {
+        (rest, kind)
+    } else if let Ok((rest, kind)) = mut_ref_statement(input) {
+        (rest, kind)
     } else if let Ok((rest, kind)) = def_statement(input) {
         (rest, kind)
     } else if let Ok((rest, kind)) = return_statement(input) {
@@ -518,6 +627,8 @@ fn statement(input: &[TokenSpan]) -> ParseResult<'_, Statement> {
     } else if let Ok((rest, kind)) = impl_statement(input) {
         (rest, kind)
     } else if let Ok((rest, kind)) = pyimport_statement(input) {
+        (rest, kind)
+    } else if let Ok((rest, kind)) = match_statement(input) {
         (rest, kind)
     } else {
         let (rest, expr) = expression(input)?;
@@ -732,5 +843,105 @@ mod tests {
                 }
                 _ => panic!("Expected Impl statement"),
             }
+        }
+
+        #[test]
+        fn test_parse_error_ops() {
+            let input = "let x = foo()?\nlet y = bar()!!";
+            let lexer = Lexer::new(input);
+            let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
+            let (_, program) = parse_program(&tokens).unwrap();
+            match &program.statements[0].kind {
+                StatementKind::Let { value, .. } => {
+                    assert!(matches!(value, Expression::Question(_)));
+                }
+                _ => panic!("Expected Let with Question"),
+            }
+            match &program.statements[1].kind {
+                StatementKind::Let { value, .. } => {
+                    assert!(matches!(value, Expression::Unwrap(_)));
+                }
+                _ => panic!("Expected Let with Unwrap"),
+            }
+        }
+        #[test]
+        fn test_parse_pyimport() {
+            let input = "pyimport:\n    import torch\n    import numpy as np";
+            let lexer = Lexer::new(input);
+            let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
+            let (_, program) = parse_program(&tokens).unwrap();
+            match &program.statements[0].kind {
+                StatementKind::PyImport(content) => {
+                    assert!(content.contains("Ident(\"torch\")"));
+                    assert!(content.contains("Ident(\"numpy\")"));
+                }
+                _ => panic!("Expected PyImport statement"),
+            }
+        }
+
+        #[test]
+        fn test_parse_complex_expressions() {
+            let input = "let x = (a + b) * (c - d) @ e.f[T](g)";
+            let lexer = Lexer::new(input);
+            let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
+            let (_, program) = parse_program(&tokens).unwrap();
+            assert_eq!(program.statements.len(), 1);
+        }
+
+        #[test]
+        fn test_parse_nested_control_flow() {
+            let input = "
+if x:
+    for i in list:
+        if i > 0:
+            $print(i)
+else:
+    $print(\"none\")
+";
+            let lexer = Lexer::new(input.trim());
+            let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
+            let (_, program) = parse_program(&tokens).unwrap();
+            assert_eq!(program.statements.len(), 1);
+        }
+
+        #[test]
+        fn test_parse_keywords() {
+            let input = "
+let x = move data
+let y = &x
+let z = ~y
+mut w = 10
+";
+            let lexer = Lexer::new(input.trim());
+            let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
+            let (_, program) = parse_program(&tokens).unwrap();
+            assert_eq!(program.statements.len(), 4);
+        }
+
+        #[test]
+        fn test_parse_impl_basic() {
+            let input = "impl Foo:\n    def bar(self):\n        return 1";
+            let lexer = Lexer::new(input);
+            let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
+            let (_, program) = parse_program(&tokens).unwrap();
+            assert_eq!(program.statements.len(), 1);
+        }
+
+        #[test]
+        fn test_parse_match_basic() {
+            let input = "match x:\n    Some(v):\n        $print(v)\n    None:\n        return";
+            let lexer = Lexer::new(input);
+            let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
+            let (_, program) = parse_program(&tokens).unwrap();
+            assert_eq!(program.statements.len(), 1);
+        }
+
+        #[test]
+        fn test_parse_ref_statement() {
+            let input = "ref x = y.z";
+            let lexer = Lexer::new(input);
+            let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
+            let (_, program) = parse_program(&tokens).unwrap();
+            assert_eq!(program.statements.len(), 1);
         }
     }

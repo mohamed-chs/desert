@@ -15,6 +15,8 @@
 - **Syntax:** Support for `let`/`mut` bindings, `def` with type annotations, `if`/`else` statements, `for` loops, `struct` definitions, `protocol` (trait) definitions, `impl` blocks (inherent and trait), and `pyimport` blocks.
 - **Unified Dot:** Successfully distinguishes between static calls (`Path.new`) and instance methods (`path.exists`) based on naming conventions (capitalization).
 - **Arithmetic/Comparison:** Full support for standard operators including the AI-specific `@` (matrix multiplication).
+- **Error Handling:** Added `?` (propagation) and `!!` (unwrap) operator support in the parser and transpiler.
+- **Python Interop:** Enhanced `pyimport` block to capture tokens and generate structured comments in the Rust output.
 - **CLI:** A functional `desert` binary with `transpile` and `check` commands.
 - **Testing:** 20 core unit tests covering the lexer, parser, and transpiler, including robust verification of the newer object-oriented features.
 

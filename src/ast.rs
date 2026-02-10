@@ -44,12 +44,16 @@ pub enum Expression {
     Move(Box<Expression>),
     SharedRef(Box<Expression>),
     UniqueRef(Box<Expression>),
+    Question(Box<Expression>), // ?
+    Unwrap(Box<Expression>),   // !!
+    Index(Box<Expression>, Box<Expression>), // expr[index]
 }
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Param {
     pub name: String,
     pub ty: Option<Type>,
+    pub is_mut: bool,
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -98,6 +102,20 @@ pub enum StatementKind {
         protocol: Option<String>,
         for_type: String,
         methods: Vec<Statement>,
+    },
+    Ref {
+        name: String,
+        ty: Option<Type>,
+        value: Expression,
+    },
+    MutRef {
+        name: String,
+        ty: Option<Type>,
+        value: Expression,
+    },
+    Match {
+        expression: Expression,
+        arms: Vec<(Expression, Vec<Statement>)>, // (pattern, body)
     },
     PyImport(String), // The whole block as a string for now
     Return(Option<Expression>),

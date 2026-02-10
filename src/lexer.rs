@@ -19,6 +19,7 @@ pub enum Token {
     #[token("return")] Return,
     #[token("import")] Import,
     #[token("pyimport")] PyImport,
+    #[token("match")] Match,
     #[token("as")] As,
     #[token("from")] From,
 

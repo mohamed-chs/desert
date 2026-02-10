@@ -31,10 +31,11 @@ impl Transpiler {
                 StatementKind::Def { name, params, return_ty, body } => {
                     let indent_str = "    ".repeat(indent);
                     let params_str: Vec<String> = params.iter().map(|p| {
+                        let mut_str = if p.is_mut { "mut " } else { "" };
                         if let Some(t) = &p.ty {
-                            format!("{}: {}", p.name, self.transpile_type(t))
+                            format!("{}{}: {}", mut_str, p.name, self.transpile_type(t))
                         } else {
-                            p.name.clone()
+                            format!("{}{}", mut_str, p.name)
                         }
                     }).collect();
                     let ret_str = if let Some(t) = return_ty {
@@ -52,7 +53,7 @@ impl Transpiler {
 
                     let footer = format!("{}}}\n", indent_str);
                     output.push_str(&footer);
-                    source_map.add_mapping(*current_line, ds_line); // Best we can do for closing brace
+                    source_map.add_mapping(*current_line, ds_line);
                     *current_line += 1;
                 }
                 StatementKind::If { condition, then_block, else_block } => {
@@ -144,7 +145,49 @@ impl Transpiler {
                 }
                 StatementKind::PyImport(content) => {
                     let indent_str = "    ".repeat(indent);
-                    output.push_str(&format!("{}// Python Import: {}\n", indent_str, content));
+                    output.push_str(&format!("{}/* Desert PyImport block:\n", indent_str));
+                    output.push_str(&format!("{}   {}\n", indent_str, content));
+                    output.push_str(&format!("{}*/\n", indent_str));
+                    source_map.add_mapping(*current_line, ds_line);
+                    *current_line += 3;
+                }
+                StatementKind::Ref { name: _, ty: _, value: _ } => {
+                    let ds_line = source[..stmt.span.start].lines().count().saturating_sub(1);
+                    let stmt_output = self.transpile_statement(stmt, indent);
+                    output.push_str(&stmt_output);
+                    source_map.add_mapping(*current_line, ds_line);
+                    *current_line += 1;
+                }
+                StatementKind::MutRef { name: _, ty: _, value: _ } => {
+                    let ds_line = source[..stmt.span.start].lines().count().saturating_sub(1);
+                    let stmt_output = self.transpile_statement(stmt, indent);
+                    output.push_str(&stmt_output);
+                    source_map.add_mapping(*current_line, ds_line);
+                    *current_line += 1;
+                }
+                StatementKind::Match { expression, arms } => {
+                    let ds_line = source[..stmt.span.start].lines().count().saturating_sub(1);
+                    let header = format!("{}match {} {{\n", "    ".repeat(indent), self.transpile_expression(expression));
+                    output.push_str(&header);
+                    source_map.add_mapping(*current_line, ds_line);
+                    *current_line += 1;
+
+                    for (pattern, body) in arms {
+                        let arm_header = format!("{}    {} => {{\n", "    ".repeat(indent), self.transpile_expression(pattern));
+                        output.push_str(&arm_header);
+                        source_map.add_mapping(*current_line, ds_line);
+                        *current_line += 1;
+
+                        self.transpile_statements(body, indent + 2, source, output, source_map, current_line);
+
+                        let arm_footer = format!("{}    }}\n", "    ".repeat(indent));
+                        output.push_str(&arm_footer);
+                        source_map.add_mapping(*current_line, ds_line);
+                        *current_line += 1;
+                    }
+
+                    let footer = format!("{}}}\n", "    ".repeat(indent));
+                    output.push_str(&footer);
                     source_map.add_mapping(*current_line, ds_line);
                     *current_line += 1;
                 }
@@ -184,10 +227,11 @@ impl Transpiler {
             }
             StatementKind::Def { name, params, return_ty, body } => {
                 let params_str: Vec<String> = params.iter().map(|p| {
+                    let mut_str = if p.is_mut { "mut " } else { "" };
                     if let Some(t) = &p.ty {
-                        format!("{}: {}", p.name, self.transpile_type(t))
+                        format!("{}{}: {}", mut_str, p.name, self.transpile_type(t))
                     } else {
-                        p.name.clone()
+                        format!("{}{}", mut_str, p.name)
                     }
                 }).collect();
                 let ret_str = if let Some(t) = return_ty {
@@ -255,7 +299,35 @@ impl Transpiler {
                 format!("{}for {} in {} {{ ... }}\n", indent_str, var, self.transpile_expression(iterable))
             }
             StatementKind::PyImport(content) => {
-                format!("{}// Python Import: {}\n", indent_str, content)
+                format!("{}/* Desert PyImport block: {} */\n", indent_str, content)
+            }
+            StatementKind::Ref { name, ty, value } => {
+                let ty_str = if let Some(t) = ty {
+                    format!(": {}", self.transpile_type(t))
+                } else {
+                    String::new()
+                };
+                format!("{}let {} {} = &{};\n", indent_str, name, ty_str, self.transpile_expression(value))
+            }
+            StatementKind::MutRef { name, ty, value } => {
+                let ty_str = if let Some(t) = ty {
+                    format!(": {}", self.transpile_type(t))
+                } else {
+                    String::new()
+                };
+                format!("{}let {} {} = &mut {};\n", indent_str, name, ty_str, self.transpile_expression(value))
+            }
+            StatementKind::Match { expression, arms } => {
+                let mut output = format!("{}match {} {{\n", indent_str, self.transpile_expression(expression));
+                for (pattern, body) in arms {
+                    output.push_str(&format!("{}    {} => {{\n", indent_str, self.transpile_expression(pattern)));
+                    for s in body {
+                        output.push_str(&self.transpile_statement(s, indent + 2));
+                    }
+                    output.push_str(&format!("{}    }}\n", indent_str));
+                }
+                output.push_str(&format!("{}}}\n", indent_str));
+                output
             }
             StatementKind::Expr(expr) => {
                 format!("{}{};\n", indent_str, self.transpile_expression(expr))
@@ -320,13 +392,22 @@ impl Transpiler {
                 }
             }
             Expression::Move(expr) => {
-                self.transpile_expression(expr)
+                self.transpile_expression(expr) // In Rust, move is the default for many types
             }
             Expression::SharedRef(expr) => {
                 format!("&{}", self.transpile_expression(expr))
             }
             Expression::UniqueRef(expr) => {
                 format!("&mut {}", self.transpile_expression(expr))
+            }
+            Expression::Question(expr) => {
+                format!("{}?", self.transpile_expression(expr))
+            }
+            Expression::Unwrap(expr) => {
+                format!("{}.unwrap()", self.transpile_expression(expr))
+            }
+            Expression::Index(expr, index) => {
+                format!("{}[{}]", self.transpile_expression(expr), self.transpile_expression(index))
             }
         }
     }
@@ -555,5 +636,52 @@ mod tests {
             let (rust_code, _) = transpiler.transpile(&program, input);
             let expected = "impl Speak for Dog {\n    fn talk(self) -> String {\n        return \"Woof\".to_string();\n    }\n}\n";
             assert_eq!(rust_code, expected);
+        }
+
+        #[test]
+        fn test_transpile_error_ops() {
+            let input = "let x = foo()?\nlet y = bar()!!";
+            let lexer = Lexer::new(input);
+            let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
+            let (_, program) = parse_program(&tokens).unwrap();
+            let transpiler = Transpiler::new();
+            let (rust_code, _) = transpiler.transpile(&program, input);
+            let expected = "let x = foo()?;\nlet y = bar().unwrap();\n";
+            assert_eq!(rust_code, expected);
+        }
+
+        #[test]
+        fn test_transpile_pyimport() {
+            let input = "pyimport:\n    import torch";
+            let lexer = Lexer::new(input);
+            let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
+            let (_, program) = parse_program(&tokens).unwrap();
+            let transpiler = Transpiler::new();
+            let (rust_code, _) = transpiler.transpile(&program, input);
+            assert!(rust_code.contains("/* Desert PyImport block:"));
+            assert!(rust_code.contains("Ident(\"torch\")"));
+        }
+
+        #[test]
+        fn test_transpile_nested_control_flow() {
+            let input = "if x:\n    for i in list:\n        $print(i)";
+            let lexer = Lexer::new(input);
+            let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
+            let (_, program) = parse_program(&tokens).unwrap();
+            let transpiler = Transpiler::new();
+            let (rust_code, _) = transpiler.transpile(&program, input);
+            assert!(rust_code.contains("if x {"));
+            assert!(rust_code.contains("for i in list {"));
+        }
+
+        #[test]
+        fn test_transpile_complex_generic_call() {
+            let input = "obj.method[T1, T2](arg1, arg2)";
+            let lexer = Lexer::new(input);
+            let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
+            let (_, program) = parse_program(&tokens).unwrap();
+            let transpiler = Transpiler::new();
+            let (rust_code, _) = transpiler.transpile(&program, input);
+            assert!(rust_code.contains("obj.method::<T1, T2>(arg1, arg2)"));
         }
     }

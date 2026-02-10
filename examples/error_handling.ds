@@ -1,0 +1,32 @@
+# Error Handling in Desert
+
+struct Config:
+    port: i32
+    debug: bool
+
+def read_config(path: Str) -> Result[Config, Str]:
+    if path == "error.ds":
+        return Err("File not found")
+    
+    return Ok(Config(8080, true))
+
+def run_server(path: Str) -> Result[Str, Str]:
+    # Use propagation operator ?
+    let config = read_config(path)?
+    
+    $print("Starting server on port {config.port}")
+    return Ok("Success")
+
+def main():
+    # Example of handling Result
+    let result = run_server("config.ds")
+    
+    if result.is_ok():
+        $print("Server exited normally")
+    else:
+        $print("Server failed")
+
+    # Example of the "Danger" operator !!
+    # Use this when you are SURE it won't fail
+    let hardcoded_config = read_config("default.ds")!!
+    $print("Hardcoded port: {hardcoded_config.port}")
