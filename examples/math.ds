@@ -1,0 +1,9 @@
+def factorial(n: i32) -> i32:
+    if n == 0:
+        return 1
+    return n * factorial(n - 1)
+
+def main():
+    let num = 5
+    let result = factorial(num)
+    $print("Factorial of {num} is {result}")

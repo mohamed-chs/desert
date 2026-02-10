@@ -1,0 +1,18 @@
+def increment(val: ~i32):
+    val = val + 1
+
+def display(val: &i32):
+    $print("The value is: {val}")
+
+def main():
+    mut count = 10
+    
+    # Passing a unique reference (mutable borrow)
+    increment(~count)
+    
+    # Passing a shared reference (immutable borrow)
+    display(&count)
+
+    # Moving ownership
+    let new_count = move count
+    $print("Count has been moved to new_count: {new_count}")

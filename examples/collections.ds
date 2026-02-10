@@ -1,0 +1,11 @@
+def filter_large_numbers(numbers: List[i32], threshold: i32) -> List[i32]:
+    mut filtered = []
+    for n in numbers:
+        if n > threshold:
+            filtered.push(n)
+    return filtered
+
+def main():
+    let data = [10, 50, 2, 100, 35]
+    let large = filter_large_numbers(data, 30)
+    $print("Numbers greater than 30: {large}")

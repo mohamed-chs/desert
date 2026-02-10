@@ -1,0 +1,2 @@
+def main():
+    $print("Hello, Desert! This is a systems language with Python-like syntax.")

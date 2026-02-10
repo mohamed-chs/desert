@@ -1,0 +1,15 @@
+pyimport:
+    import torch
+    import numpy as np
+
+def run_model(weights: List[f32], inputs: List[f32]):
+    # The @ operator is used for matrix/tensor operations
+    let output = weights @ inputs
+    return output
+
+def main():
+    let w = [0.1, 0.8, -0.2]
+    let i = [1.0, 0.5, 2.0]
+    
+    let result = run_model(w, i)
+    $print("Model result: {result}")
