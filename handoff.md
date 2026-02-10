@@ -12,8 +12,11 @@
 - **Mirage Engine (`src/mirage.rs`):** Intercepts JSON diagnostics from the Rust compiler, rewrites them using Desert terminology (e.g., replacing `&mut` with `~`), and remaps line numbers.
 
 ## 3. Current Progress
-- **Syntax:** Support for `let`/`mut` bindings, `def` with type annotations, `if` statements, `for` loops, and `pyimport` blocks.
+- **Syntax:** Support for `let`/`mut` bindings, `def` with type annotations, `if`/`else` statements, `for` loops, `struct` definitions, `protocol` (trait) definitions, `impl` blocks (inherent and trait), and `pyimport` blocks.
 - **Unified Dot:** Successfully distinguishes between static calls (`Path.new`) and instance methods (`path.exists`) based on naming conventions (capitalization).
 - **Arithmetic/Comparison:** Full support for standard operators including the AI-specific `@` (matrix multiplication).
 - **CLI:** A functional `desert` binary with `transpile` and `check` commands.
-- **Testing:** 12 core unit tests covering the lexer, parser, and transpiler, ensuring bit-for-bit correctness of the generated Rust.
+- **Testing:** 20 core unit tests covering the lexer, parser, and transpiler, including robust verification of the newer object-oriented features.
+
+## 4. Maintenance
+- **Reflexive Documentation:** Maintainers must update `handoff.md` and `guidelines.md` automatically as the language evolves.

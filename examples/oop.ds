@@ -1,0 +1,30 @@
+# Desert Object-Oriented Programming Example
+
+protocol Speak:
+    def talk(self) -> Str:
+        return ""
+
+struct Dog:
+    name: Str
+    breed: Str
+
+impl Speak for Dog:
+    def talk(self) -> Str:
+        return "Woof! I am a dog."
+
+struct Cat:
+    name: Str
+
+impl Speak for Cat:
+    def talk(self) -> Str:
+        return "Meow!"
+
+def make_it_talk(animal: Speak):
+    $print(animal.talk())
+
+def main():
+    let my_dog = Dog("Buddy", "Golden Retriever")
+    let my_cat = Cat("Luna")
+    
+    make_it_talk(my_dog)
+    make_it_talk(my_cat)

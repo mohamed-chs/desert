@@ -1,0 +1,40 @@
+# Desert Data Processing Example
+
+struct Record:
+    id: i32
+    value: f64
+    label: Str
+
+protocol Processor:
+    def process(self, record: ~Record):
+        return
+
+struct ScaleProcessor:
+    factor: f64
+
+impl Processor for ScaleProcessor:
+    def process(self, record: ~Record):
+        record.value = record.value * self.factor
+
+def process_all(records: ~List[Record], processor: &ScaleProcessor):
+    for r in records:
+        processor.process(~r)
+
+def main():
+    mut records = [
+        Record(1, 10.0, "A"),
+        Record(2, 20.0, "B"),
+        Record(3, 30.0, "C")
+    ]
+    
+    let scaler = ScaleProcessor(factor=1.5)
+    
+    $print("Before processing:")
+    for r in records:
+        $print("Value:", r.value)
+    
+    process_all(~records, &scaler)
+    
+    $print("After processing:")
+    for r in records:
+        $print("Value:", r.value)

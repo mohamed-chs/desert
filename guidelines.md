@@ -15,6 +15,10 @@
 - **Integration Tests:** Use `.ds` files to test the full `check` pipeline. If `rustc` rejects the transpiled code, the feature is not complete.
 - **Regression:** Run `cargo test` after every change. The indentation logic is sensitive to whitespace changes in the test inputs.
 
-## 4. Code Style
-- **Rust Idioms:** While Desert code looks like Python, the compiler implementation should follow standard Rust idioms (e.g., `Result` for error handling, `Box` for recursive AST nodes).
-- **Minimal Comments:** The code should be self-documenting. Use comments primarily to explain *why* a specific parsing or transpilation choice was made to match Rust's borrow checker requirements.
+## 5. Maintenance & Reflexive Updates
+- **Self-Correction:** This document and `handoff.md` must be updated reflexively after any significant feature implementation or architectural change.
+- **Codebase Health:** Always perform minor quality-of-life improvements (e.g., fixing warnings, improving error messages, optimizing imports) automatically when working on a task.
+- **Documentation Parity:** Ensure that `overview.md` and `examples/` remain in sync with the actual language capabilities.
+
+> [!IMPORTANT]
+> Keep the project's technical documentation updated reflexively and automatically. Do not wait for explicit user requests to document new features or maintain repository health.

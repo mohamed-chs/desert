@@ -155,5 +155,5 @@ def main():
 
 ---
 
-## 9. Conclusion
-Desert acknowledges that the difficulty of Rust is 20% syntax and 80% mental model. By fixing the 20%, it allows developers to focus entirely on the 80% (Ownership). It provides a high-level "safe haven" for Python developers to enter the world of systems programming without the syntactic friction of the 1970s.
+## 10. Maintenance & Health
+Desert is a living project. Documentation and examples are updated reflexively as new features are implemented. The Mirage engine ensures developer experience remains high by always remapping system-level errors back to Desert's simplified mental model.
