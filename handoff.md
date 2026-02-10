@@ -12,13 +12,13 @@
 - **Mirage Engine (`src/mirage.rs`):** Intercepts JSON diagnostics from the Rust compiler, rewrites them using Desert terminology (e.g., replacing `&mut` with `~`), and remaps line numbers.
 
 ## 3. Current Progress
-- **Syntax:** Support for `let`/`mut` bindings, `def` with type annotations, `if`/`else` statements, `for` loops, `struct` definitions, `protocol` (trait) definitions, `impl` blocks (inherent and trait), and `pyimport` blocks.
+- **Syntax:** Support for `let`/`mut` bindings, `def` with type annotations, `if`/`else` statements, `for` loops, `struct` definitions, `protocol` (trait) definitions, `impl` blocks (inherent and trait), `pyimport` blocks, `match` statements, indexing (`expr[index]`), and memory syntax (`move`, `ref`, `mut ref`).
 - **Unified Dot:** Successfully distinguishes between static calls (`Path.new`) and instance methods (`path.exists`) based on naming conventions (capitalization).
-- **Arithmetic/Comparison:** Full support for standard operators including the AI-specific `@` (matrix multiplication).
-- **Error Handling:** Added `?` (propagation) and `!!` (unwrap) operator support in the parser and transpiler.
+- **Arithmetic/Comparison:** Full support for standard operators including the AI-specific `@` (matrix multiplication) and `Indexing`.
+- **Error Handling:** Full implementation of `?` (propagation) and `!!` (unwrap) operator support in the parser and transpiler.
 - **Python Interop:** Enhanced `pyimport` block to capture tokens and generate structured comments in the Rust output.
 - **CLI:** A functional `desert` binary with `transpile` and `check` commands.
-- **Testing:** 20 core unit tests covering the lexer, parser, and transpiler, including robust verification of the newer object-oriented features.
+- **Testing:** 32 core unit tests covering the lexer, parser, and transpiler, including robust verification of memory management, matching, and indexing.
 
 ## 4. Maintenance
-- **Reflexive Documentation:** Maintainers must update `handoff.md` and `guidelines.md` automatically as the language evolves.
+- **Reflexive Documentation:** Maintainers **MUST** update `handoff.md` and `guidelines.md` **AUTOMATICALLY AND REFLEXIVELY** without being asked to ensure repository health.

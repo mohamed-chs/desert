@@ -16,9 +16,9 @@
 - **Regression:** Run `cargo test` after every change. The indentation logic is sensitive to whitespace changes in the test inputs.
 
 ## 5. Maintenance & Reflexive Updates
-- **Self-Correction:** This document and `handoff.md` must be updated reflexively after any significant feature implementation or architectural change.
+- **Self-Correction:** This document and `handoff.md` **MUST** be updated **REFLEXIVELY, AUTOMATICALLY, AND WITHOUT BEING PROMPTED** after any significant feature implementation or architectural change.
 - **Codebase Health:** Always perform minor quality-of-life improvements (e.g., fixing warnings, improving error messages, optimizing imports) automatically when working on a task.
 - **Documentation Parity:** Ensure that `overview.md` and `examples/` remain in sync with the actual language capabilities.
 
 > [!IMPORTANT]
-> Keep the project's technical documentation updated reflexively and automatically. Do not wait for explicit user requests to document new features or maintain repository health.
+> **KEEP THE PROJECT'S TECHNICAL DOCUMENTATION UPDATED REFLEXIVELY AND AUTOMATICALLY.** Do not wait for explicit user requests to document new features or maintain repository health. This is a **CRITICAL REQUIREMENT** for project continuity.
