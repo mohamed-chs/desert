@@ -72,57 +72,82 @@ impl Transpiler {
                         self.transpile_statements(else_b, indent + 1, source, output, source_map, current_line);
                     }
 
-                                                        let footer = format!("{}}}\n", indent_str);
+                    let footer = format!("{}}}\n", indent_str);
+                    output.push_str(&footer);
+                    source_map.add_mapping(*current_line, ds_line);
+                    *current_line += 1;
+                }
+                StatementKind::For { var, iterable, body } => {
+                    let indent_str = "    ".repeat(indent);
+                    let header = format!("{}for {} in {} {{\n", indent_str, var, self.transpile_expression(iterable));
+                    output.push_str(&header);
+                    source_map.add_mapping(*current_line, ds_line);
+                    *current_line += 1;
 
-                                                        output.push_str(&footer);
+                    self.transpile_statements(body, indent + 1, source, output, source_map, current_line);
 
-                                                        source_map.add_mapping(*current_line, ds_line);
+                    let footer = format!("{}}}\n", indent_str);
+                    output.push_str(&footer);
+                    source_map.add_mapping(*current_line, ds_line);
+                    *current_line += 1;
+                }
+                StatementKind::Struct { name, fields } => {
+                    let indent_str = "    ".repeat(indent);
+                    let header = format!("{}struct {} {{\n", indent_str, name);
+                    output.push_str(&header);
+                    source_map.add_mapping(*current_line, ds_line);
+                    *current_line += 1;
 
-                                                        *current_line += 1;
+                    for field in fields {
+                        let f_ty = field.ty.as_ref().map(|t| self.transpile_type(t)).unwrap_or_else(|| "()".to_string());
+                        output.push_str(&format!("{}    pub {}: {},\n", indent_str, field.name, f_ty));
+                        source_map.add_mapping(*current_line, ds_line);
+                        *current_line += 1;
+                    }
 
-                                                    }
+                    let footer = format!("{}}}\n", indent_str);
+                    output.push_str(&footer);
+                    source_map.add_mapping(*current_line, ds_line);
+                    *current_line += 1;
+                }
+                StatementKind::Protocol { name, methods } => {
+                    let indent_str = "    ".repeat(indent);
+                    let header = format!("{}trait {} {{\n", indent_str, name);
+                    output.push_str(&header);
+                    source_map.add_mapping(*current_line, ds_line);
+                    *current_line += 1;
 
-                                                    StatementKind::For { var, iterable, body } => {
+                    self.transpile_statements(methods, indent + 1, source, output, source_map, current_line);
 
-                                                        let indent_str = "    ".repeat(indent);
+                    let footer = format!("{}}}\n", indent_str);
+                    output.push_str(&footer);
+                    source_map.add_mapping(*current_line, ds_line);
+                    *current_line += 1;
+                }
+                StatementKind::Impl { protocol, for_type, methods } => {
+                    let indent_str = "    ".repeat(indent);
+                    let header = if let Some(p) = protocol {
+                        format!("{}impl {} for {} {{\n", indent_str, p, for_type)
+                    } else {
+                        format!("{}impl {} {{\n", indent_str, for_type)
+                    };
+                    output.push_str(&header);
+                    source_map.add_mapping(*current_line, ds_line);
+                    *current_line += 1;
 
-                                                        let header = format!("{}for {} in {} {{\n", indent_str, var, self.transpile_expression(iterable));
+                    self.transpile_statements(methods, indent + 1, source, output, source_map, current_line);
 
-                                                        output.push_str(&header);
-
-                                                        source_map.add_mapping(*current_line, ds_line);
-
-                                                        *current_line += 1;
-
-                                    
-
-                                                        self.transpile_statements(body, indent + 1, source, output, source_map, current_line);
-
-                                    
-
-                                                        let footer = format!("{}}}\n", indent_str);
-
-                                                        output.push_str(&footer);
-
-                                                        source_map.add_mapping(*current_line, ds_line);
-
-                                                        *current_line += 1;
-
-                                                    }
-
-                                                    StatementKind::PyImport(content) => {
-
-                                    
-
-                                    let indent_str = "    ".repeat(indent);
-
-                                    output.push_str(&format!("{}// Python Import: {}\n", indent_str, content));
-
-                                    source_map.add_mapping(*current_line, ds_line);
-
-                                    *current_line += 1;
-
-                                }
+                    let footer = format!("{}}}\n", indent_str);
+                    output.push_str(&footer);
+                    source_map.add_mapping(*current_line, ds_line);
+                    *current_line += 1;
+                }
+                StatementKind::PyImport(content) => {
+                    let indent_str = "    ".repeat(indent);
+                    output.push_str(&format!("{}// Python Import: {}\n", indent_str, content));
+                    source_map.add_mapping(*current_line, ds_line);
+                    *current_line += 1;
+                }
 
                                 _ => {
 
@@ -197,9 +222,36 @@ impl Transpiler {
             StatementKind::Return(None) => {
                 format!("{}return;\n", indent_str)
             }
+            StatementKind::Struct { name, fields } => {
+                let mut output = format!("{}struct {} {{\n", indent_str, name);
+                for field in fields {
+                    let f_ty = field.ty.as_ref().map(|t| self.transpile_type(t)).unwrap_or_else(|| "()".to_string());
+                    output.push_str(&format!("{}    pub {}: {},\n", indent_str, field.name, f_ty));
+                }
+                output.push_str(&format!("{}}}\n", indent_str));
+                output
+            }
+            StatementKind::Protocol { name, methods } => {
+                let mut output = format!("{}trait {} {{\n", indent_str, name);
+                for m in methods {
+                    output.push_str(&self.transpile_statement(m, indent + 1));
+                }
+                output.push_str(&format!("{}}}\n", indent_str));
+                output
+            }
+            StatementKind::Impl { protocol, for_type, methods } => {
+                let mut output = if let Some(p) = protocol {
+                    format!("{}impl {} for {} {{\n", indent_str, p, for_type)
+                } else {
+                    format!("{}impl {} {{\n", indent_str, for_type)
+                };
+                for m in methods {
+                    output.push_str(&self.transpile_statement(m, indent + 1));
+                }
+                output.push_str(&format!("{}}}\n", indent_str));
+                output
+            }
             StatementKind::For { var, iterable, body: _ } => {
-                // This case is handled in transpile_statements for mapping,
-                // but we need it here for completeness if called directly.
                 format!("{}for {} in {} {{ ... }}\n", indent_str, var, self.transpile_expression(iterable))
             }
             StatementKind::PyImport(content) => {
@@ -269,6 +321,12 @@ impl Transpiler {
             }
             Expression::Move(expr) => {
                 self.transpile_expression(expr)
+            }
+            Expression::SharedRef(expr) => {
+                format!("&{}", self.transpile_expression(expr))
+            }
+            Expression::UniqueRef(expr) => {
+                format!("&mut {}", self.transpile_expression(expr))
             }
         }
     }
@@ -449,9 +507,53 @@ mod tests {
             let (rust_code, _) = transpiler.transpile(&program, input);
 
             assert_eq!(rust_code, "let x = Path::new(\"foo\".to_string());\nlet y = x.exists();\n");
-
         }
 
-    }
+        #[test]
+        fn test_transpile_if_else() {
+            let input = "if x > 0:\n    return 1\nelse:\n    return 0";
+            let lexer = Lexer::new(input);
+            let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
+            let (_, program) = parse_program(&tokens).unwrap();
+            let transpiler = Transpiler::new();
+            let (rust_code, _) = transpiler.transpile(&program, input);
+            let expected = "if (x > 0) {\n    return 1;\n} else {\n    return 0;\n}\n";
+            assert_eq!(rust_code, expected);
+        }
 
-    
+        #[test]
+        fn test_transpile_struct() {
+            let input = "struct Point:\n    x: i32\n    y: i32";
+            let lexer = Lexer::new(input);
+            let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
+            let (_, program) = parse_program(&tokens).unwrap();
+            let transpiler = Transpiler::new();
+            let (rust_code, _) = transpiler.transpile(&program, input);
+            let expected = "struct Point {\n    pub x: i32,\n    pub y: i32,\n}\n";
+            assert_eq!(rust_code, expected);
+        }
+
+        #[test]
+        fn test_transpile_protocol() {
+            let input = "protocol Speak:\n    def talk(self) -> Str:\n        return \"\"";
+            let lexer = Lexer::new(input);
+            let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
+            let (_, program) = parse_program(&tokens).unwrap();
+            let transpiler = Transpiler::new();
+            let (rust_code, _) = transpiler.transpile(&program, input);
+            let expected = "trait Speak {\n    fn talk(self) -> String {\n        return \"\".to_string();\n    }\n}\n";
+            assert_eq!(rust_code, expected);
+        }
+
+        #[test]
+        fn test_transpile_impl() {
+            let input = "impl Speak for Dog:\n    def talk(self) -> Str:\n        return \"Woof\"";
+            let lexer = Lexer::new(input);
+            let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
+            let (_, program) = parse_program(&tokens).unwrap();
+            let transpiler = Transpiler::new();
+            let (rust_code, _) = transpiler.transpile(&program, input);
+            let expected = "impl Speak for Dog {\n    fn talk(self) -> String {\n        return \"Woof\".to_string();\n    }\n}\n";
+            assert_eq!(rust_code, expected);
+        }
+    }

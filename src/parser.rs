@@ -94,6 +94,13 @@ fn primary_expression(input: &[TokenSpan]) -> ParseResult<'_, Expression> {
     if let Ok((rest, _)) = token(Token::LBracket)(input) {
         let mut items = Vec::new();
         let mut current_input = rest;
+        
+        let mut has_indent = false;
+        if let Ok((next_input, _)) = token(Token::Indent)(current_input) {
+            current_input = next_input;
+            has_indent = true;
+        }
+
         while let Ok((next_input, expr)) = expression(current_input) {
             items.push(expr);
             current_input = next_input;
@@ -103,6 +110,12 @@ fn primary_expression(input: &[TokenSpan]) -> ParseResult<'_, Expression> {
                 break;
             }
         }
+        
+        if has_indent {
+            let (next_input, _) = token(Token::Dedent)(current_input)?;
+            current_input = next_input;
+        }
+
         let (input, _) = token(Token::RBracket)(current_input)?;
         return Ok((input, Expression::Literal(Literal::List(items))));
     }
@@ -111,6 +124,13 @@ fn primary_expression(input: &[TokenSpan]) -> ParseResult<'_, Expression> {
         let (rest, _) = token(Token::LParen)(rest)?;
         let mut args = Vec::new();
         let mut current_input = rest;
+
+        let mut has_indent = false;
+        if let Ok((next_input, _)) = token(Token::Indent)(current_input) {
+            current_input = next_input;
+            has_indent = true;
+        }
+
         while let Ok((next_input, arg)) = expression(current_input) {
             args.push(arg);
             current_input = next_input;
@@ -120,12 +140,22 @@ fn primary_expression(input: &[TokenSpan]) -> ParseResult<'_, Expression> {
                 break;
             }
         }
+
+        if has_indent {
+            let (next_input, _) = token(Token::Dedent)(current_input)?;
+            current_input = next_input;
+        }
+
         let (input, _) = token(Token::RParen)(current_input)?;
         return Ok((input, Expression::MacroCall(name, args)));
     }
-    if let Ok((rest, _)) = token(Token::Move)(input) {
+    if let Ok((rest, _)) = token(Token::Ampersand)(input) {
         let (rest, expr) = expression(rest)?;
-        return Ok((rest, Expression::Move(Box::new(expr))));
+        return Ok((rest, Expression::SharedRef(Box::new(expr))));
+    }
+    if let Ok((rest, _)) = token(Token::Tilde)(input) {
+        let (rest, expr) = expression(rest)?;
+        return Ok((rest, Expression::UniqueRef(Box::new(expr))));
     }
     if let Ok((rest, name)) = ident(input) {
         let mut current_input = rest;
@@ -173,6 +203,13 @@ fn primary_expression(input: &[TokenSpan]) -> ParseResult<'_, Expression> {
             if let Ok((next_input, _)) = token(Token::LParen)(current_input) {
                 let mut args = Vec::new();
                 let mut arg_input = next_input;
+
+                let mut has_indent = false;
+                if let Ok((next_input, _)) = token(Token::Indent)(arg_input) {
+                    arg_input = next_input;
+                    has_indent = true;
+                }
+
                 while let Ok((next_input, arg)) = expression(arg_input) {
                     args.push(arg);
                     arg_input = next_input;
@@ -182,6 +219,12 @@ fn primary_expression(input: &[TokenSpan]) -> ParseResult<'_, Expression> {
                         break;
                     }
                 }
+
+                if has_indent {
+                    let (next_input, _) = token(Token::Dedent)(arg_input)?;
+                    arg_input = next_input;
+                }
+
                 let (final_input, _) = token(Token::RParen)(arg_input)?;
                 expr = Expression::Call(Box::new(expr), args);
                 current_input = final_input;
@@ -249,8 +292,17 @@ fn comparison_expression(input: &[TokenSpan]) -> ParseResult<'_, Expression> {
     Ok((current_input, left))
 }
 
+fn assignment_expression(input: &[TokenSpan]) -> ParseResult<'_, Expression> {
+    let (input, left) = comparison_expression(input)?;
+    if let Ok((rest, _)) = token(Token::Assign)(input) {
+        let (rest, right) = assignment_expression(rest)?;
+        return Ok((rest, Expression::BinaryOp(Box::new(left), BinaryOp::Assign, Box::new(right))));
+    }
+    Ok((input, left))
+}
+
 fn expression(input: &[TokenSpan]) -> ParseResult<'_, Expression> {
-    comparison_expression(input)
+    assignment_expression(input)
 }
 
 fn let_statement(input: &[TokenSpan]) -> ParseResult<'_, StatementKind> {
@@ -351,7 +403,70 @@ fn if_statement(input: &[TokenSpan]) -> ParseResult<'_, StatementKind> {
     let (input, condition) = expression(input)?;
     let (input, _) = token(Token::Colon)(input)?;
     let (input, then_block) = block(input)?;
-    Ok((input, StatementKind::If { condition, then_block, else_block: None }))
+    
+    let mut current_input = input;
+    let mut else_block = None;
+    if let Ok((next_input, _)) = token(Token::Else)(current_input) {
+        let (next_input, _) = token(Token::Colon)(next_input)?;
+        let (next_input, block) = block(next_input)?;
+        else_block = Some(block);
+        current_input = next_input;
+    }
+    
+    Ok((current_input, StatementKind::If { condition, then_block, else_block }))
+}
+
+fn struct_statement(input: &[TokenSpan]) -> ParseResult<'_, StatementKind> {
+    let (input, _) = token(Token::Struct)(input)?;
+    let (input, name) = ident(input)?;
+    let (input, _) = token(Token::Colon)(input)?;
+    let (input, _) = token(Token::Indent)(input)?;
+    
+    let mut fields = Vec::new();
+    let mut current_input = input;
+    while let Ok((next_input, f_name)) = ident(current_input) {
+        let (next_input, _) = token(Token::Colon)(next_input)?;
+        let (next_input, f_ty) = parse_type(next_input)?;
+        fields.push(Param { name: f_name, ty: Some(f_ty) });
+        current_input = next_input;
+    }
+    
+    let (input, _) = token(Token::Dedent)(current_input)?;
+    Ok((input, StatementKind::Struct { name, fields }))
+}
+
+fn protocol_statement(input: &[TokenSpan]) -> ParseResult<'_, StatementKind> {
+    let (input, _) = token(Token::Protocol)(input)?;
+    let (input, name) = ident(input)?;
+    let (input, _) = token(Token::Colon)(input)?;
+    let (input, methods) = block(input)?;
+    Ok((input, StatementKind::Protocol { name, methods }))
+}
+
+fn impl_statement(input: &[TokenSpan]) -> ParseResult<'_, StatementKind> {
+    let (input, _) = token(Token::Impl)(input)?;
+    
+    let (input, name1) = ident(input)?;
+    let current_input = input;
+    
+    if let Ok((next_input, _)) = token(Token::For)(current_input) {
+        let (next_input, name2) = ident(next_input)?;
+        let (next_input, _) = token(Token::Colon)(next_input)?;
+        let (next_input, methods) = block(next_input)?;
+        Ok((next_input, StatementKind::Impl {
+            protocol: Some(name1),
+            for_type: name2,
+            methods,
+        }))
+    } else {
+        let (input, _) = token(Token::Colon)(current_input)?;
+        let (input, methods) = block(input)?;
+        Ok((input, StatementKind::Impl {
+            protocol: None,
+            for_type: name1,
+            methods,
+        }))
+    }
 }
 
 fn pyimport_statement(input: &[TokenSpan]) -> ParseResult<'_, StatementKind> {
@@ -395,6 +510,12 @@ fn statement(input: &[TokenSpan]) -> ParseResult<'_, Statement> {
     } else if let Ok((rest, kind)) = if_statement(input) {
         (rest, kind)
     } else if let Ok((rest, kind)) = for_statement(input) {
+        (rest, kind)
+    } else if let Ok((rest, kind)) = struct_statement(input) {
+        (rest, kind)
+    } else if let Ok((rest, kind)) = protocol_statement(input) {
+        (rest, kind)
+    } else if let Ok((rest, kind)) = impl_statement(input) {
         (rest, kind)
     } else if let Ok((rest, kind)) = pyimport_statement(input) {
         (rest, kind)
@@ -555,6 +676,61 @@ mod tests {
 
         }
 
-    }
+        #[test]
+        fn test_parse_if_else() {
+            let input = "if x > 0:\n    return 1\nelse:\n    return 0";
+            let lexer = Lexer::new(input);
+            let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
+            let (_, program) = parse_program(&tokens).unwrap();
+            match &program.statements[0].kind {
+                StatementKind::If { else_block, .. } => {
+                    assert!(else_block.is_some());
+                }
+                _ => panic!("Expected If statement"),
+            }
+        }
 
-    
+        #[test]
+        fn test_parse_struct() {
+            let input = "struct Point:\n    x: i32\n    y: i32";
+            let lexer = Lexer::new(input);
+            let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
+            let (_, program) = parse_program(&tokens).unwrap();
+            match &program.statements[0].kind {
+                StatementKind::Struct { name, fields } => {
+                    assert_eq!(name, "Point");
+                    assert_eq!(fields.len(), 2);
+                }
+                _ => panic!("Expected Struct statement"),
+            }
+        }
+
+        #[test]
+        fn test_parse_protocol() {
+            let input = "protocol Speak:\n    def talk(self) -> Str:\n        return \"\"";
+            let lexer = Lexer::new(input);
+            let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
+            let (_, program) = parse_program(&tokens).unwrap();
+            match &program.statements[0].kind {
+                StatementKind::Protocol { name, .. } => {
+                    assert_eq!(name, "Speak");
+                }
+                _ => panic!("Expected Protocol statement"),
+            }
+        }
+
+        #[test]
+        fn test_parse_impl() {
+            let input = "impl Speak for Dog:\n    def talk(self) -> Str:\n        return \"Woof\"";
+            let lexer = Lexer::new(input);
+            let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
+            let (_, program) = parse_program(&tokens).unwrap();
+            match &program.statements[0].kind {
+                StatementKind::Impl { protocol, for_type, .. } => {
+                    assert_eq!(protocol, &Some("Speak".to_string()));
+                    assert_eq!(for_type, "Dog");
+                }
+                _ => panic!("Expected Impl statement"),
+            }
+        }
+    }

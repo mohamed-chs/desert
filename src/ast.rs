@@ -42,6 +42,8 @@ pub enum Expression {
     MemberAccess(Box<Expression>, String),
     GenericCall(Box<Expression>, Vec<Type>, Vec<Expression>), // .collect[List[i32]]()
     Move(Box<Expression>),
+    SharedRef(Box<Expression>),
+    UniqueRef(Box<Expression>),
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -83,6 +85,19 @@ pub enum StatementKind {
         var: String,
         iterable: Expression,
         body: Vec<Statement>,
+    },
+    Struct {
+        name: String,
+        fields: Vec<Param>,
+    },
+    Protocol {
+        name: String,
+        methods: Vec<Statement>, // These will likely be Def with empty bodies or signatures
+    },
+    Impl {
+        protocol: Option<String>,
+        for_type: String,
+        methods: Vec<Statement>,
     },
     PyImport(String), // The whole block as a string for now
     Return(Option<Expression>),

@@ -70,6 +70,9 @@ pub enum Token {
     #[regex(r"[ \t]+", logos::skip)]
     Whitespace,
 
+    #[regex(r"#[^\n]*", logos::skip, allow_greedy = true)]
+    Comment,
+
     Indent,
     Dedent,
 }
