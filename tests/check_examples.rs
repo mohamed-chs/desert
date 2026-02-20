@@ -15,3 +15,8 @@ fn check_hello_world_example() {
 fn check_math_example() {
     run_check("math.ds");
 }
+
+#[test]
+fn check_collections_example() {
+    run_check("collections.ds");
+}

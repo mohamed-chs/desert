@@ -563,7 +563,7 @@ impl Transpiler {
                     format_template.push('{');
                     format_template.push('}');
                 } else {
-                    format_template.push_str("{}");
+                    format_template.push_str("{:?}");
                     interpolation_args.push(placeholder.to_string());
                 }
 
@@ -700,7 +700,7 @@ mod tests {
         let (_, program) = parse_program(&tokens).unwrap();
         let transpiler = Transpiler::new();
         let (rust_code, _) = transpiler.transpile(&program, input);
-        let expected = "fn main() {\n    println!(\"{}\", format!(\"port {}\", cfg.port));\n}\n";
+        let expected = "fn main() {\n    println!(\"{}\", format!(\"port {:?}\", cfg.port));\n}\n";
         assert_eq!(rust_code, expected);
     }
 
