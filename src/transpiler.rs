@@ -483,10 +483,11 @@ impl Transpiler {
                 )
             }
             Expression::MacroCall(name, args) => {
-                let rust_macro = match name.as_str() {
-                    "print" => "println!",
-                    _ => &format!("{}!", name),
-                };
+                if name == "print" {
+                    return self.transpile_print_macro(args);
+                }
+
+                let rust_macro = format!("{}!", name);
                 let args_str: Vec<String> =
                     args.iter().map(|a| self.transpile_expression(a)).collect();
                 format!("{}({})", rust_macro, args_str.join(", "))
@@ -522,6 +523,70 @@ impl Transpiler {
                 )
             }
         }
+    }
+
+    fn transpile_print_macro(&self, args: &[Expression]) -> String {
+        if args.is_empty() {
+            return "println!()".to_string();
+        }
+
+        let parts: Vec<String> = args
+            .iter()
+            .map(|arg| match arg {
+                Expression::Literal(Literal::String(s)) => self.transpile_print_string_literal(s),
+                _ => format!("format!(\"{{:?}}\", {})", self.transpile_expression(arg)),
+            })
+            .collect();
+
+        if parts.len() == 1 {
+            format!("println!(\"{{}}\", {})", parts[0])
+        } else {
+            format!("println!(\"{{}}\", vec![{}].join(\" \"))", parts.join(", "))
+        }
+    }
+
+    fn transpile_print_string_literal(&self, value: &str) -> String {
+        let mut format_template = String::new();
+        let mut interpolation_args = Vec::new();
+        let mut idx = 0;
+
+        while let Some(open_rel) = value[idx..].find('{') {
+            let open = idx + open_rel;
+            let prefix = &value[idx..open];
+            format_template.push_str(prefix);
+
+            if let Some(close_rel) = value[open + 1..].find('}') {
+                let close = open + 1 + close_rel;
+                let placeholder = value[open + 1..close].trim();
+
+                if placeholder.is_empty() {
+                    format_template.push('{');
+                    format_template.push('}');
+                } else {
+                    format_template.push_str("{}");
+                    interpolation_args.push(placeholder.to_string());
+                }
+
+                idx = close + 1;
+            } else {
+                format_template.push_str(&value[open..]);
+                idx = value.len();
+            }
+        }
+
+        if idx < value.len() {
+            format_template.push_str(&value[idx..]);
+        }
+
+        if interpolation_args.is_empty() {
+            return format!("\"{}\".to_string()", format_template);
+        }
+
+        format!(
+            "format!(\"{}\", {})",
+            format_template,
+            interpolation_args.join(", ")
+        )
     }
 
     fn transpile_type(&self, ty: &Type) -> String {
@@ -622,8 +687,32 @@ mod tests {
 
         let (rust_code, _) = transpiler.transpile(&program, input);
 
-        let expected = "fn main() {\n    println!(\"Hello, Desert!\".to_string());\n}\n";
+        let expected = "fn main() {\n    println!(\"{}\", \"Hello, Desert!\".to_string());\n}\n";
 
+        assert_eq!(rust_code, expected);
+    }
+
+    #[test]
+    fn test_transpile_print_with_interpolation_and_field_access() {
+        let input = "def main():\n    $print(\"port {cfg.port}\")";
+        let lexer = Lexer::new(input);
+        let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
+        let (_, program) = parse_program(&tokens).unwrap();
+        let transpiler = Transpiler::new();
+        let (rust_code, _) = transpiler.transpile(&program, input);
+        let expected = "fn main() {\n    println!(\"{}\", format!(\"port {}\", cfg.port));\n}\n";
+        assert_eq!(rust_code, expected);
+    }
+
+    #[test]
+    fn test_transpile_print_with_multiple_arguments() {
+        let input = "def main():\n    $print(\"x\", val, list)";
+        let lexer = Lexer::new(input);
+        let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
+        let (_, program) = parse_program(&tokens).unwrap();
+        let transpiler = Transpiler::new();
+        let (rust_code, _) = transpiler.transpile(&program, input);
+        let expected = "fn main() {\n    println!(\"{}\", vec![\"x\".to_string(), format!(\"{:?}\", val), format!(\"{:?}\", list)].join(\" \"));\n}\n";
         assert_eq!(rust_code, expected);
     }
 
