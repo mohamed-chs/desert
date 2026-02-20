@@ -4,51 +4,94 @@ use std::ops::Range;
 
 #[derive(Logos, Debug, PartialEq, Clone)]
 pub enum Token {
-    #[token("let")] Let,
-    #[token("mut")] Mut,
-    #[token("ref")] Ref,
-    #[token("move")] Move,
-    #[token("def")] Def,
-    #[token("protocol")] Protocol,
-    #[token("struct")] Struct,
-    #[token("impl")] Impl,
-    #[token("for")] For,
-    #[token("in")] In,
-    #[token("if")] If,
-    #[token("else")] Else,
-    #[token("return")] Return,
-    #[token("import")] Import,
-    #[token("pyimport")] PyImport,
-    #[token("match")] Match,
-    #[token("as")] As,
-    #[token("from")] From,
+    #[token("let")]
+    Let,
+    #[token("mut")]
+    Mut,
+    #[token("ref")]
+    Ref,
+    #[token("move")]
+    Move,
+    #[token("def")]
+    Def,
+    #[token("protocol")]
+    Protocol,
+    #[token("struct")]
+    Struct,
+    #[token("impl")]
+    Impl,
+    #[token("for")]
+    For,
+    #[token("in")]
+    In,
+    #[token("if")]
+    If,
+    #[token("else")]
+    Else,
+    #[token("return")]
+    Return,
+    #[token("import")]
+    Import,
+    #[token("pyimport")]
+    PyImport,
+    #[token("match")]
+    Match,
+    #[token("as")]
+    As,
+    #[token("from")]
+    From,
 
-    #[token(":")] Colon,
-    #[token("->")] Arrow,
-    #[token("?")] Question,
-    #[token("!!")] BangBang,
-    #[token(".")] Dot,
-    #[token("[")] LBracket,
-    #[token("]")] RBracket,
-    #[token("(")] LParen,
-    #[token(")")] RParen,
-    #[token(",")] Comma,
-    #[token("=")] Assign,
-    #[token("==")] Eq,
-    #[token("!=")] Ne,
-    #[token(">")] Gt,
-    #[token("<")] Lt,
-    #[token(">=")] Ge,
-    #[token("<=")] Le,
-    #[token("@")] At,
-    #[token("$")] Dollar,
-    #[token("&")] Ampersand,
-    #[token("~")] Tilde,
+    #[token(":")]
+    Colon,
+    #[token("->")]
+    Arrow,
+    #[token("?")]
+    Question,
+    #[token("!!")]
+    BangBang,
+    #[token(".")]
+    Dot,
+    #[token("[")]
+    LBracket,
+    #[token("]")]
+    RBracket,
+    #[token("(")]
+    LParen,
+    #[token(")")]
+    RParen,
+    #[token(",")]
+    Comma,
+    #[token("=")]
+    Assign,
+    #[token("==")]
+    Eq,
+    #[token("!=")]
+    Ne,
+    #[token(">")]
+    Gt,
+    #[token("<")]
+    Lt,
+    #[token(">=")]
+    Ge,
+    #[token("<=")]
+    Le,
+    #[token("@")]
+    At,
+    #[token("$")]
+    Dollar,
+    #[token("&")]
+    Ampersand,
+    #[token("~")]
+    Tilde,
 
-    #[token("+")] Plus,
-    #[token("-")] Minus,
-    #[token("*")] Star,
-    #[token("/")] Slash,
+    #[token("+")]
+    Plus,
+    #[token("-")]
+    Minus,
+    #[token("*")]
+    Star,
+    #[token("/")]
+    Slash,
 
     #[regex("[a-zA-Z_][a-zA-Z0-9_]*", |lex| lex.slice().to_string())]
     Ident(String),
@@ -115,8 +158,11 @@ impl<'a> Iterator for Lexer<'a> {
                 let indent_str = &slice[1..];
                 let mut current_indent = 0;
                 for c in indent_str.chars() {
-                    if c == ' ' { current_indent += 1; }
-                    else if c == '\t' { current_indent += 4; }
+                    if c == ' ' {
+                        current_indent += 1;
+                    } else if c == '\t' {
+                        current_indent += 4;
+                    }
                 }
 
                 // Skip blank lines
@@ -141,7 +187,7 @@ impl<'a> Iterator for Lexer<'a> {
                         return Some(Err(()));
                     }
                 }
-                
+
                 if let Some(t) = self.pending_tokens.pop_front() {
                     Some(Ok(t))
                 } else {
@@ -176,9 +222,12 @@ mod tests {
     fn test_basic_tokens() {
         let input = "let x = 10\ndef foo():\n    return x";
         let mut lexer = Lexer::new(input);
-        
+
         assert_eq!(lexer.next().unwrap().unwrap().0, Token::Let);
-        assert_eq!(lexer.next().unwrap().unwrap().0, Token::Ident("x".to_string()));
+        assert_eq!(
+            lexer.next().unwrap().unwrap().0,
+            Token::Ident("x".to_string())
+        );
         assert_eq!(lexer.next().unwrap().unwrap().0, Token::Assign);
         assert_eq!(lexer.next().unwrap().unwrap().0, Token::Int(10));
         assert_eq!(lexer.next().unwrap().unwrap().0, Token::Def);

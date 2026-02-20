@@ -5,7 +5,9 @@ pub struct SourceMap {
 
 impl SourceMap {
     pub fn new() -> Self {
-        Self { mappings: Vec::new() }
+        Self {
+            mappings: Vec::new(),
+        }
     }
 
     pub fn add_mapping(&mut self, rs_line: usize, ds_line: usize) {
@@ -17,5 +19,11 @@ impl SourceMap {
 
     pub fn get_ds_line(&self, rs_line: usize) -> Option<usize> {
         self.mappings.get(rs_line).copied()
+    }
+}
+
+impl Default for SourceMap {
+    fn default() -> Self {
+        Self::new()
     }
 }

@@ -1,5 +1,5 @@
-use serde::Deserialize;
 use crate::sourcemap::SourceMap;
+use serde::Deserialize;
 
 #[derive(Deserialize, Debug)]
 pub struct Diagnostic {
@@ -18,9 +18,7 @@ pub struct DiagnosticSpan {
 #[serde(tag = "reason")]
 pub enum CargoMessage {
     #[serde(rename = "compiler-message")]
-    CompilerMessage {
-        message: Diagnostic,
-    },
+    CompilerMessage { message: Diagnostic },
     #[serde(other)]
     Other,
 }
@@ -30,22 +28,25 @@ pub struct Mirage;
 impl Mirage {
     pub fn translate_error(msg: &Diagnostic, source_map: &SourceMap) -> String {
         let mut translated = msg.message.clone();
-        
+
         // Basic symbol replacement
         translated = translated.replace("Vec", "List");
         translated = translated.replace("&mut ", "~");
         translated = translated.replace("::", ".");
-        
+
         let mut locations = String::new();
         for span in &msg.spans {
             // rustc lines are 1-based. SourceMap uses 0-based.
             let rs_line = span.line_start.saturating_sub(1);
             if let Some(ds_line) = source_map.get_ds_line(rs_line) {
-                locations.push_str(&format!("
-  Line {}: in Desert source", ds_line + 1));
+                locations.push_str(&format!(
+                    "
+  Line {}: in Desert source",
+                    ds_line + 1
+                ));
             }
         }
-        
+
         format!("{}{}", translated, locations)
     }
 }

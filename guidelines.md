@@ -1,24 +1,27 @@
 # Desert Development Guidelines
 
-## 1. Philosophical North Stars
-- **Transparent Transpilation:** A Desert developer should be able to guess the generated Rust code. The mapping should be as direct as possible.
-- **Mirage First:** If a user has to look at the generated `.rs` file to understand an error, the Mirage system has failed. Always prioritize error mapping for new features.
-- **Pythonic Purity:** Maintain 4-space indentation and colon-based blocks. Avoid introducing C-style punctuation into the Desert frontend.
+## Principles
 
-## 2. Technical Tips
-- **Lexer Spans:** When adding new tokens, ensure they don't break the indentation stack. Synthetic `Dedent` tokens at EOF are required to satisfy the parser's block requirements.
-- **Parser Precedence:** Always use the hierarchical function pattern in `nom` (e.g., `primary` -> `multiplicative` -> `additive` -> `comparison`) to maintain correct operator precedence.
-- **Resolver Logic:** The `Resolver` is currently simple (capitalization-based). As the project grows, it will need to integrate with `cargo metadata` to resolve external crate types.
+- Prefer predictable transpilation over clever syntax tricks.
+- Keep generated Rust readable; it is still a debugging escape hatch.
+- Add language features only with parser + transpiler tests together.
 
-## 3. Testing Standards
-- **Parallel Testing:** Every new AST node must have a corresponding test case in `parser.rs` (for structure) and `transpiler.rs` (for output).
-- **Integration Tests:** Use `.ds` files to test the full `check` pipeline. If `rustc` rejects the transpiled code, the feature is not complete.
-- **Regression:** Run `cargo test` after every change. The indentation logic is sensitive to whitespace changes in the test inputs.
+## Code Guidelines
 
-## 5. Maintenance & Reflexive Updates
-- **Self-Correction:** This document and `handoff.md` **MUST** be updated **REFLEXIVELY, AUTOMATICALLY, AND WITHOUT BEING PROMPTED** after any significant feature implementation or architectural change.
-- **Codebase Health:** Always perform minor quality-of-life improvements (e.g., fixing warnings, improving error messages, optimizing imports) automatically when working on a task.
-- **Documentation Parity:** Ensure that `overview.md` and `examples/` remain in sync with the actual language capabilities.
+- Preserve indentation-sensitive lexer behavior; whitespace regressions are easy.
+- Keep parser precedence explicit (`primary -> multiplicative -> additive -> comparison -> assignment`).
+- Treat `Resolver` as a temporary strategy layer; avoid burying semantic rules in transpiler string code.
+- Keep Mirage message rewrites explicit and conservative.
 
-> [!IMPORTANT]
-> **KEEP THE PROJECT'S TECHNICAL DOCUMENTATION UPDATED REFLEXIVELY AND AUTOMATICALLY.** Do not wait for explicit user requests to document new features or maintain repository health. This is a **CRITICAL REQUIREMENT** for project continuity.
+## Testing Expectations
+
+- Run `cargo test` for every functional change.
+- Run `cargo clippy --all-targets --all-features` for quality checks.
+- Add regression tests for every parser or transpiler bug fix.
+- Prefer small `.ds` fixtures that model real usage patterns.
+
+## Documentation Hygiene
+
+- Keep `overview.md` focused on what exists now, not aspirational features.
+- Keep `handoff.md` operational: architecture, status, risks, next tasks.
+- When behavior changes, update examples and docs in the same patch.

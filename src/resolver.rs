@@ -16,14 +16,20 @@ impl Resolver {
         types.insert("Str".to_string());
         types.insert("List".to_string());
         types.insert("Dict".to_string());
-        
+
         Self { types }
     }
 
     pub fn is_type(&self, name: &str) -> bool {
-        self.types.contains(name) || name.chars().next().map_or(false, |c| c.is_uppercase())
+        self.types.contains(name) || name.chars().next().is_some_and(|c| c.is_uppercase())
     }
 
     // This is a simplified resolution strategy:
     // If the left side of a dot starts with an uppercase letter or is a known type, it's a static call.
+}
+
+impl Default for Resolver {
+    fn default() -> Self {
+        Self::new()
+    }
 }
