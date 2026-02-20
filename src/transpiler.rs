@@ -1,6 +1,7 @@
 use crate::ast::*;
 use crate::resolver::Resolver;
 use crate::sourcemap::SourceMap;
+use std::collections::HashMap;
 
 pub struct Transpiler {
     resolver: Resolver,
@@ -17,11 +18,13 @@ impl Transpiler {
         let mut output = String::new();
         let mut source_map = SourceMap::new();
         let mut current_line = 0;
+        let struct_fields = self.collect_struct_fields(program);
 
         self.transpile_statements(
             &program.statements,
             0,
             source,
+            &struct_fields,
             &mut output,
             &mut source_map,
             &mut current_line,
@@ -35,6 +38,7 @@ impl Transpiler {
         statements: &[Statement],
         indent: usize,
         source: &str,
+        struct_fields: &HashMap<String, Vec<String>>,
         output: &mut String,
         source_map: &mut SourceMap,
         current_line: &mut usize,
@@ -53,6 +57,14 @@ impl Transpiler {
                     let params_str: Vec<String> = params
                         .iter()
                         .map(|p| {
+                            if p.name == "self" && p.ty.is_none() {
+                                return if p.is_mut {
+                                    "&mut self".to_string()
+                                } else {
+                                    "&self".to_string()
+                                };
+                            }
+
                             let mut_str = if p.is_mut { "mut " } else { "" };
                             if let Some(t) = &p.ty {
                                 format!("{}{}: {}", mut_str, p.name, self.transpile_type(t))
@@ -82,6 +94,7 @@ impl Transpiler {
                         body,
                         indent + 1,
                         source,
+                        struct_fields,
                         output,
                         source_map,
                         current_line,
@@ -101,7 +114,7 @@ impl Transpiler {
                     let header = format!(
                         "{}if {} {{\n",
                         indent_str,
-                        self.transpile_expression(condition)
+                        self.transpile_expression(condition, struct_fields)
                     );
                     output.push_str(&header);
                     source_map.add_mapping(*current_line, ds_line);
@@ -111,6 +124,7 @@ impl Transpiler {
                         then_block,
                         indent + 1,
                         source,
+                        struct_fields,
                         output,
                         source_map,
                         current_line,
@@ -125,6 +139,7 @@ impl Transpiler {
                             else_b,
                             indent + 1,
                             source,
+                            struct_fields,
                             output,
                             source_map,
                             current_line,
@@ -146,7 +161,7 @@ impl Transpiler {
                         "{}for {} in {} {{\n",
                         indent_str,
                         var,
-                        self.transpile_expression(iterable)
+                        self.transpile_expression(iterable, struct_fields)
                     );
                     output.push_str(&header);
                     source_map.add_mapping(*current_line, ds_line);
@@ -156,6 +171,7 @@ impl Transpiler {
                         body,
                         indent + 1,
                         source,
+                        struct_fields,
                         output,
                         source_map,
                         current_line,
@@ -203,6 +219,7 @@ impl Transpiler {
                         methods,
                         indent + 1,
                         source,
+                        struct_fields,
                         output,
                         source_map,
                         current_line,
@@ -232,6 +249,7 @@ impl Transpiler {
                         methods,
                         indent + 1,
                         source,
+                        struct_fields,
                         output,
                         source_map,
                         current_line,
@@ -255,7 +273,7 @@ impl Transpiler {
                     ty: _,
                     value: _,
                 } => {
-                    let stmt_output = self.transpile_statement(stmt, indent);
+                    let stmt_output = self.transpile_statement(stmt, indent, struct_fields);
                     output.push_str(&stmt_output);
                     source_map.add_mapping(*current_line, ds_line);
                     *current_line += 1;
@@ -265,7 +283,7 @@ impl Transpiler {
                     ty: _,
                     value: _,
                 } => {
-                    let stmt_output = self.transpile_statement(stmt, indent);
+                    let stmt_output = self.transpile_statement(stmt, indent, struct_fields);
                     output.push_str(&stmt_output);
                     source_map.add_mapping(*current_line, ds_line);
                     *current_line += 1;
@@ -275,7 +293,7 @@ impl Transpiler {
                     let header = format!(
                         "{}match {} {{\n",
                         "    ".repeat(indent),
-                        self.transpile_expression(expression)
+                        self.transpile_expression(expression, struct_fields)
                     );
                     output.push_str(&header);
                     source_map.add_mapping(*current_line, ds_line);
@@ -285,7 +303,7 @@ impl Transpiler {
                         let arm_header = format!(
                             "{}    {} => {{\n",
                             "    ".repeat(indent),
-                            self.transpile_expression(pattern)
+                            self.transpile_expression(pattern, struct_fields)
                         );
                         output.push_str(&arm_header);
                         source_map.add_mapping(*current_line, ds_line);
@@ -295,6 +313,7 @@ impl Transpiler {
                             body,
                             indent + 2,
                             source,
+                            struct_fields,
                             output,
                             source_map,
                             current_line,
@@ -312,7 +331,7 @@ impl Transpiler {
                     *current_line += 1;
                 }
                 _ => {
-                    let stmt_output = self.transpile_statement(stmt, indent);
+                    let stmt_output = self.transpile_statement(stmt, indent, struct_fields);
                     for _ in stmt_output.lines() {
                         source_map.add_mapping(*current_line, ds_line);
                         *current_line += 1;
@@ -323,7 +342,12 @@ impl Transpiler {
         }
     }
 
-    fn transpile_statement(&self, stmt: &Statement, indent: usize) -> String {
+    fn transpile_statement(
+        &self,
+        stmt: &Statement,
+        indent: usize,
+        struct_fields: &HashMap<String, Vec<String>>,
+    ) -> String {
         let indent_str = "    ".repeat(indent);
         match &stmt.kind {
             StatementKind::Let { name, ty, value } => {
@@ -337,7 +361,7 @@ impl Transpiler {
                     indent_str,
                     name,
                     ty_str,
-                    self.transpile_expression(value)
+                    self.transpile_expression(value, struct_fields)
                 )
             }
             StatementKind::Mut { name, ty, value } => {
@@ -351,14 +375,14 @@ impl Transpiler {
                     indent_str,
                     name,
                     ty_str,
-                    self.transpile_expression(value)
+                    self.transpile_expression(value, struct_fields)
                 )
             }
             StatementKind::Return(Some(expr)) => {
                 format!(
                     "{}return {};\n",
                     indent_str,
-                    self.transpile_expression(expr)
+                    self.transpile_expression(expr, struct_fields)
                 )
             }
             StatementKind::Return(None) => {
@@ -378,7 +402,7 @@ impl Transpiler {
                     indent_str,
                     name,
                     ty_str,
-                    self.transpile_expression(value)
+                    self.transpile_expression(value, struct_fields)
                 )
             }
             StatementKind::MutRef { name, ty, value } => {
@@ -392,23 +416,23 @@ impl Transpiler {
                     indent_str,
                     name,
                     ty_str,
-                    self.transpile_expression(value)
+                    self.transpile_expression(value, struct_fields)
                 )
             }
             StatementKind::Match { expression, arms } => {
                 let mut output = format!(
                     "{}match {} {{\n",
                     indent_str,
-                    self.transpile_expression(expression)
+                    self.transpile_expression(expression, struct_fields)
                 );
                 for (pattern, body) in arms {
                     output.push_str(&format!(
                         "{}    {} => {{\n",
                         indent_str,
-                        self.transpile_expression(pattern)
+                        self.transpile_expression(pattern, struct_fields)
                     ));
                     for s in body {
-                        output.push_str(&self.transpile_statement(s, indent + 2));
+                        output.push_str(&self.transpile_statement(s, indent + 2, struct_fields));
                     }
                     output.push_str(&format!("{}    }}\n", indent_str));
                 }
@@ -416,13 +440,17 @@ impl Transpiler {
                 output
             }
             StatementKind::Expr(expr) => {
-                format!("{}{};\n", indent_str, self.transpile_expression(expr))
+                format!("{}{};\n", indent_str, self.transpile_expression(expr, struct_fields))
             }
             _ => unreachable!("transpile_statement called with block-level statement"),
         }
     }
 
-    fn transpile_expression(&self, expr: &Expression) -> String {
+    fn transpile_expression(
+        &self,
+        expr: &Expression,
+        struct_fields: &HashMap<String, Vec<String>>,
+    ) -> String {
         match expr {
             Expression::Literal(Literal::Int(i)) => i.to_string(),
             Expression::Literal(Literal::Float(f)) => {
@@ -436,7 +464,10 @@ impl Transpiler {
             Expression::Literal(Literal::String(s)) => format!("\"{}\".to_string()", s),
             Expression::Literal(Literal::List(items)) => {
                 let items_str: Vec<String> =
-                    items.iter().map(|i| self.transpile_expression(i)).collect();
+                    items
+                        .iter()
+                        .map(|i| self.transpile_expression(i, struct_fields))
+                        .collect();
                 format!("vec![{}]", items_str.join(", "))
             }
             Expression::Ident(name) => name.clone(),
@@ -457,43 +488,56 @@ impl Transpiler {
                 };
                 format!(
                     "({} {} {})",
-                    self.transpile_expression(left),
+                    self.transpile_expression(left, struct_fields),
                     op_str,
-                    self.transpile_expression(right)
+                    self.transpile_expression(right, struct_fields)
                 )
             }
             Expression::Call(callee, args) => {
+                if let Expression::Ident(name) = callee.as_ref()
+                    && let Some(constructor) =
+                        self.transpile_struct_constructor_call(name, args, struct_fields)
+                {
+                    return constructor;
+                }
+
                 let args_str: Vec<String> =
-                    args.iter().map(|a| self.transpile_expression(a)).collect();
+                    args.iter()
+                        .map(|a| self.transpile_expression(a, struct_fields))
+                        .collect();
                 format!(
                     "{}({})",
-                    self.transpile_expression(callee),
+                    self.transpile_expression(callee, struct_fields),
                     args_str.join(", ")
                 )
             }
             Expression::GenericCall(callee, types, args) => {
                 let types_str: Vec<String> = types.iter().map(|t| self.transpile_type(t)).collect();
                 let args_str: Vec<String> =
-                    args.iter().map(|a| self.transpile_expression(a)).collect();
+                    args.iter()
+                        .map(|a| self.transpile_expression(a, struct_fields))
+                        .collect();
                 format!(
                     "{}::<{}>({})",
-                    self.transpile_expression(callee),
+                    self.transpile_expression(callee, struct_fields),
                     types_str.join(", "),
                     args_str.join(", ")
                 )
             }
             Expression::MacroCall(name, args) => {
                 if name == "print" {
-                    return self.transpile_print_macro(args);
+                    return self.transpile_print_macro(args, struct_fields);
                 }
 
                 let rust_macro = format!("{}!", name);
                 let args_str: Vec<String> =
-                    args.iter().map(|a| self.transpile_expression(a)).collect();
+                    args.iter()
+                        .map(|a| self.transpile_expression(a, struct_fields))
+                        .collect();
                 format!("{}({})", rust_macro, args_str.join(", "))
             }
             Expression::MemberAccess(expr, member) => {
-                let expr_str = self.transpile_expression(expr);
+                let expr_str = self.transpile_expression(expr, struct_fields);
                 if self.resolver.is_type(&expr_str) {
                     format!("{}::{}", expr_str, member)
                 } else {
@@ -501,31 +545,35 @@ impl Transpiler {
                 }
             }
             Expression::Move(expr) => {
-                self.transpile_expression(expr) // In Rust, move is the default for many types
+                self.transpile_expression(expr, struct_fields) // In Rust, move is the default for many types
             }
             Expression::SharedRef(expr) => {
-                format!("&{}", self.transpile_expression(expr))
+                format!("&{}", self.transpile_expression(expr, struct_fields))
             }
             Expression::UniqueRef(expr) => {
-                format!("&mut {}", self.transpile_expression(expr))
+                format!("&mut {}", self.transpile_expression(expr, struct_fields))
             }
             Expression::Question(expr) => {
-                format!("{}?", self.transpile_expression(expr))
+                format!("{}?", self.transpile_expression(expr, struct_fields))
             }
             Expression::Unwrap(expr) => {
-                format!("{}.unwrap()", self.transpile_expression(expr))
+                format!("{}.unwrap()", self.transpile_expression(expr, struct_fields))
             }
             Expression::Index(expr, index) => {
                 format!(
                     "{}[{}]",
-                    self.transpile_expression(expr),
-                    self.transpile_expression(index)
+                    self.transpile_expression(expr, struct_fields),
+                    self.transpile_expression(index, struct_fields)
                 )
             }
         }
     }
 
-    fn transpile_print_macro(&self, args: &[Expression]) -> String {
+    fn transpile_print_macro(
+        &self,
+        args: &[Expression],
+        struct_fields: &HashMap<String, Vec<String>>,
+    ) -> String {
         if args.is_empty() {
             return "println!()".to_string();
         }
@@ -534,7 +582,10 @@ impl Transpiler {
             .iter()
             .map(|arg| match arg {
                 Expression::Literal(Literal::String(s)) => self.transpile_print_string_literal(s),
-                _ => format!("format!(\"{{:?}}\", {})", self.transpile_expression(arg)),
+                _ => format!(
+                    "format!(\"{{:?}}\", {})",
+                    self.transpile_expression(arg, struct_fields)
+                ),
             })
             .collect();
 
@@ -587,6 +638,60 @@ impl Transpiler {
             format_template,
             interpolation_args.join(", ")
         )
+    }
+
+    fn collect_struct_fields(&self, program: &Program) -> HashMap<String, Vec<String>> {
+        let mut struct_fields = HashMap::new();
+        for stmt in &program.statements {
+            if let StatementKind::Struct { name, fields } = &stmt.kind {
+                let field_names = fields.iter().map(|field| field.name.clone()).collect();
+                struct_fields.insert(name.clone(), field_names);
+            }
+        }
+        struct_fields
+    }
+
+    fn transpile_struct_constructor_call(
+        &self,
+        name: &str,
+        args: &[Expression],
+        struct_fields: &HashMap<String, Vec<String>>,
+    ) -> Option<String> {
+        let fields = struct_fields.get(name)?;
+        let mut assigned = HashMap::new();
+        let mut positional = Vec::new();
+
+        for arg in args {
+            match arg {
+                Expression::BinaryOp(left, BinaryOp::Assign, right) => {
+                    if let Expression::Ident(field_name) = left.as_ref() {
+                        assigned.insert(
+                            field_name.clone(),
+                            self.transpile_expression(right, struct_fields),
+                        );
+                    } else {
+                        positional.push(self.transpile_expression(arg, struct_fields));
+                    }
+                }
+                _ => positional.push(self.transpile_expression(arg, struct_fields)),
+            }
+        }
+
+        let mut positional_idx = 0;
+        let mut field_pairs = Vec::new();
+        for field in fields {
+            if let Some(value) = assigned.get(field) {
+                field_pairs.push(format!("{field}: {value}"));
+                continue;
+            }
+
+            if let Some(value) = positional.get(positional_idx) {
+                field_pairs.push(format!("{field}: {value}"));
+                positional_idx += 1;
+            }
+        }
+
+        Some(format!("{name} {{ {} }}", field_pairs.join(", ")))
     }
 
     fn transpile_type(&self, ty: &Type) -> String {
@@ -801,6 +906,31 @@ mod tests {
     }
 
     #[test]
+    fn test_transpile_struct_constructor_positional() {
+        let input = "struct Point:\n    x: i32\n    y: i32\nlet p = Point(1, 2)";
+        let lexer = Lexer::new(input);
+        let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
+        let (_, program) = parse_program(&tokens).unwrap();
+        let transpiler = Transpiler::new();
+        let (rust_code, _) = transpiler.transpile(&program, input);
+        let expected =
+            "struct Point {\n    pub x: i32,\n    pub y: i32,\n}\nlet p = Point { x: 1, y: 2 };\n";
+        assert_eq!(rust_code, expected);
+    }
+
+    #[test]
+    fn test_transpile_struct_constructor_named() {
+        let input = "struct Scale:\n    factor: f64\nlet s = Scale(factor=1.5)";
+        let lexer = Lexer::new(input);
+        let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
+        let (_, program) = parse_program(&tokens).unwrap();
+        let transpiler = Transpiler::new();
+        let (rust_code, _) = transpiler.transpile(&program, input);
+        let expected = "struct Scale {\n    pub factor: f64,\n}\nlet s = Scale { factor: 1.5 };\n";
+        assert_eq!(rust_code, expected);
+    }
+
+    #[test]
     fn test_transpile_protocol() {
         let input = "protocol Speak:\n    def talk(self) -> Str:\n        return \"\"";
         let lexer = Lexer::new(input);
@@ -808,7 +938,7 @@ mod tests {
         let (_, program) = parse_program(&tokens).unwrap();
         let transpiler = Transpiler::new();
         let (rust_code, _) = transpiler.transpile(&program, input);
-        let expected = "trait Speak {\n    fn talk(self) -> String {\n        return \"\".to_string();\n    }\n}\n";
+        let expected = "trait Speak {\n    fn talk(&self) -> String {\n        return \"\".to_string();\n    }\n}\n";
         assert_eq!(rust_code, expected);
     }
 
@@ -820,7 +950,20 @@ mod tests {
         let (_, program) = parse_program(&tokens).unwrap();
         let transpiler = Transpiler::new();
         let (rust_code, _) = transpiler.transpile(&program, input);
-        let expected = "impl Speak for Dog {\n    fn talk(self) -> String {\n        return \"Woof\".to_string();\n    }\n}\n";
+        let expected =
+            "impl Speak for Dog {\n    fn talk(&self) -> String {\n        return \"Woof\".to_string();\n    }\n}\n";
+        assert_eq!(rust_code, expected);
+    }
+
+    #[test]
+    fn test_transpile_mut_self_receiver() {
+        let input = "impl Counter:\n    def inc(mut self):\n        self.value = self.value + 1";
+        let lexer = Lexer::new(input);
+        let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
+        let (_, program) = parse_program(&tokens).unwrap();
+        let transpiler = Transpiler::new();
+        let (rust_code, _) = transpiler.transpile(&program, input);
+        let expected = "impl Counter {\n    fn inc(&mut self) {\n        (self.value = (self.value + 1));\n    }\n}\n";
         assert_eq!(rust_code, expected);
     }
 

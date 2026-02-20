@@ -20,3 +20,8 @@ fn check_math_example() {
 fn check_collections_example() {
     run_check("collections.ds");
 }
+
+#[test]
+fn check_error_handling_example() {
+    run_check("error_handling.ds");
+}
