@@ -45,7 +45,3 @@ Run example-based integration tests:
 ```bash
 cargo test --test check_examples
 ```
-
-## License
-
-MIT License (see project root).
