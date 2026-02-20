@@ -40,3 +40,8 @@ fn check_ai_interop_example() {
 fn check_neural_network_example() {
     run_check("neural_network.ds");
 }
+
+#[test]
+fn check_borrows_example() {
+    run_check("borrows.ds");
+}
