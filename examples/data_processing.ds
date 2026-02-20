@@ -18,7 +18,7 @@ impl Processor for ScaleProcessor:
 
 def process_all(records: ~List[Record], processor: &ScaleProcessor):
     for r in records:
-        processor.process(~r)
+        processor.process(r)
 
 def main():
     mut records = [
@@ -29,12 +29,8 @@ def main():
     
     let scaler = ScaleProcessor(factor=1.5)
     
-    $print("Before processing:")
-    for r in records:
-        $print("Value:", r.value)
-    
     process_all(~records, &scaler)
-    
-    $print("After processing:")
+
+    $print("Scaled values:")
     for r in records:
         $print("Value:", r.value)

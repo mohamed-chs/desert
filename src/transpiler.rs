@@ -582,7 +582,10 @@ impl Transpiler {
                 }
             }
             Expression::Move(expr) => {
-                self.transpile_expression(expr, struct_fields) // In Rust, move is the default for many types
+                format!(
+                    "std::mem::take(&mut {})",
+                    self.transpile_expression(expr, struct_fields)
+                )
             }
             Expression::SharedRef(expr) => {
                 format!("&{}", self.transpile_expression(expr, struct_fields))
@@ -1028,6 +1031,18 @@ mod tests {
             rust_code,
             "fn foo(x: &i32, y: &mut Vec<f32>) -> i32 {\n    return 0;\n}\n"
         );
+    }
+
+    #[test]
+    fn test_transpile_move_uses_mem_take() {
+        let input = "mut x = 10\nlet y = move x";
+        let lexer = Lexer::new(input);
+        let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
+        let (_, program) = parse_program(&tokens).unwrap();
+        let transpiler = Transpiler::new();
+        let (rust_code, _) = transpiler.transpile(&program, input);
+        let expected = "let mut x = 10;\nlet y = std::mem::take(&mut x);\n";
+        assert_eq!(rust_code, expected);
     }
 
     #[test]

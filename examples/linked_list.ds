@@ -8,7 +8,7 @@ struct LinkedList:
 impl LinkedList:
     def push(mut self, val: i32):
         let new_node = Node(val, move self.head)
-        self.head = Some(new_node)
+        self.head = Some(Box.new(new_node))
 
 def main():
     mut list = LinkedList(None)

@@ -45,3 +45,13 @@ fn check_neural_network_example() {
 fn check_borrows_example() {
     run_check("borrows.ds");
 }
+
+#[test]
+fn check_data_processing_example() {
+    run_check("data_processing.ds");
+}
+
+#[test]
+fn check_linked_list_example() {
+    run_check("linked_list.ds");
+}
