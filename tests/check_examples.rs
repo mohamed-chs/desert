@@ -25,3 +25,8 @@ fn check_collections_example() {
 fn check_error_handling_example() {
     run_check("error_handling.ds");
 }
+
+#[test]
+fn check_oop_example() {
+    run_check("oop.ds");
+}

@@ -2,6 +2,7 @@ use crate::ast::*;
 use crate::resolver::Resolver;
 use crate::sourcemap::SourceMap;
 use std::collections::HashMap;
+use std::collections::HashSet;
 
 pub struct Transpiler {
     resolver: Resolver,
@@ -19,12 +20,14 @@ impl Transpiler {
         let mut source_map = SourceMap::new();
         let mut current_line = 0;
         let struct_fields = self.collect_struct_fields(program);
+        let protocol_names = self.collect_protocol_names(program);
 
         self.transpile_statements(
             &program.statements,
             0,
             source,
             &struct_fields,
+            &protocol_names,
             &mut output,
             &mut source_map,
             &mut current_line,
@@ -39,6 +42,7 @@ impl Transpiler {
         indent: usize,
         source: &str,
         struct_fields: &HashMap<String, Vec<String>>,
+        protocol_names: &HashSet<String>,
         output: &mut String,
         source_map: &mut SourceMap,
         current_line: &mut usize,
@@ -67,7 +71,12 @@ impl Transpiler {
 
                             let mut_str = if p.is_mut { "mut " } else { "" };
                             if let Some(t) = &p.ty {
-                                format!("{}{}: {}", mut_str, p.name, self.transpile_type(t))
+                                format!(
+                                    "{}{}: {}",
+                                    mut_str,
+                                    p.name,
+                                    self.transpile_param_type(t, protocol_names)
+                                )
                             } else {
                                 format!("{}{}", mut_str, p.name)
                             }
@@ -95,6 +104,7 @@ impl Transpiler {
                         indent + 1,
                         source,
                         struct_fields,
+                        protocol_names,
                         output,
                         source_map,
                         current_line,
@@ -125,6 +135,7 @@ impl Transpiler {
                         indent + 1,
                         source,
                         struct_fields,
+                        protocol_names,
                         output,
                         source_map,
                         current_line,
@@ -140,6 +151,7 @@ impl Transpiler {
                             indent + 1,
                             source,
                             struct_fields,
+                            protocol_names,
                             output,
                             source_map,
                             current_line,
@@ -172,6 +184,7 @@ impl Transpiler {
                         indent + 1,
                         source,
                         struct_fields,
+                        protocol_names,
                         output,
                         source_map,
                         current_line,
@@ -220,6 +233,7 @@ impl Transpiler {
                         indent + 1,
                         source,
                         struct_fields,
+                        protocol_names,
                         output,
                         source_map,
                         current_line,
@@ -250,6 +264,7 @@ impl Transpiler {
                         indent + 1,
                         source,
                         struct_fields,
+                        protocol_names,
                         output,
                         source_map,
                         current_line,
@@ -314,6 +329,7 @@ impl Transpiler {
                             indent + 2,
                             source,
                             struct_fields,
+                            protocol_names,
                             output,
                             source_map,
                             current_line,
@@ -649,6 +665,25 @@ impl Transpiler {
             }
         }
         struct_fields
+    }
+
+    fn collect_protocol_names(&self, program: &Program) -> HashSet<String> {
+        let mut protocol_names = HashSet::new();
+        for stmt in &program.statements {
+            if let StatementKind::Protocol { name, .. } = &stmt.kind {
+                protocol_names.insert(name.clone());
+            }
+        }
+        protocol_names
+    }
+
+    fn transpile_param_type(&self, ty: &Type, protocol_names: &HashSet<String>) -> String {
+        if let Type::Simple(name) = ty
+            && protocol_names.contains(name)
+        {
+            return format!("impl {}", name);
+        }
+        self.transpile_type(ty)
     }
 
     fn transpile_struct_constructor_call(
