@@ -68,6 +68,9 @@ fn main() -> anyhow::Result<()> {
             let output = std::process::Command::new("rustc")
                 .arg("--edition=2024")
                 .arg("--error-format=json")
+                .arg("--emit=metadata")
+                .arg("--out-dir")
+                .arg(&temp_dir)
                 .arg(&rs_file)
                 .output()?;
 
