@@ -30,3 +30,13 @@ fn check_error_handling_example() {
 fn check_oop_example() {
     run_check("oop.ds");
 }
+
+#[test]
+fn check_ai_interop_example() {
+    run_check("ai_interop.ds");
+}
+
+#[test]
+fn check_neural_network_example() {
+    run_check("neural_network.ds");
+}

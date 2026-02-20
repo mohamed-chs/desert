@@ -80,6 +80,12 @@ fn float_lit(input: &[TokenSpan]) -> ParseResult<'_, f64> {
 fn primary_expression(input: &[TokenSpan]) -> ParseResult<'_, Expression> {
     if let Ok((rest, _)) = token(Token::Minus)(input) {
         let (rest, expr) = primary_expression(rest)?;
+        if let Expression::Literal(Literal::Int(i)) = expr {
+            return Ok((rest, Expression::Literal(Literal::Int(-i))));
+        }
+        if let Expression::Literal(Literal::Float(f)) = expr {
+            return Ok((rest, Expression::Literal(Literal::Float(-f))));
+        }
         return Ok((
             rest,
             Expression::BinaryOp(
@@ -977,6 +983,20 @@ mod tests {
         let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
         let (_, program) = parse_program(&tokens).unwrap();
         assert_eq!(program.statements.len(), 1);
+    }
+
+    #[test]
+    fn test_parse_negative_float_literal() {
+        let input = "let x = -0.2";
+        let lexer = Lexer::new(input);
+        let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
+        let (_, program) = parse_program(&tokens).unwrap();
+        match &program.statements[0].kind {
+            StatementKind::Let { value, .. } => {
+                assert!(matches!(value, Expression::Literal(Literal::Float(v)) if (*v - (-0.2)).abs() < f64::EPSILON));
+            }
+            _ => panic!("Expected Let statement"),
+        }
     }
 
     #[test]

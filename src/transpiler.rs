@@ -4,6 +4,8 @@ use crate::sourcemap::SourceMap;
 use std::collections::HashMap;
 use std::collections::HashSet;
 
+const MATMUL_PRELUDE: &str = "trait DesertMatMul<Rhs> {\n    type Output;\n    fn desert_matmul(self, rhs: Rhs) -> Self::Output;\n}\n\nimpl DesertMatMul<Vec<f32>> for Vec<f32> {\n    type Output = Vec<f32>;\n\n    fn desert_matmul(self, rhs: Vec<f32>) -> Self::Output {\n        vec![self.into_iter().zip(rhs).map(|(a, b)| a * b).sum()]\n    }\n}\n\nimpl DesertMatMul<Vec<f32>> for Vec<Vec<f32>> {\n    type Output = Vec<f32>;\n\n    fn desert_matmul(self, rhs: Vec<f32>) -> Self::Output {\n        self.into_iter()\n            .map(|row| row.into_iter().zip(rhs.iter().copied()).map(|(a, b)| a * b).sum())\n            .collect()\n    }\n}\n\nfn desert_matmul<L, R>(lhs: L, rhs: R) -> <L as DesertMatMul<R>>::Output\nwhere\n    L: DesertMatMul<R>,\n{\n    lhs.desert_matmul(rhs)\n}\n\n";
+
 pub struct Transpiler {
     resolver: Resolver,
 }
@@ -21,6 +23,15 @@ impl Transpiler {
         let mut current_line = 0;
         let struct_fields = self.collect_struct_fields(program);
         let protocol_names = self.collect_protocol_names(program);
+        let uses_matmul = self.program_uses_matmul(program);
+
+        if uses_matmul {
+            output.push_str(MATMUL_PRELUDE);
+            for _ in MATMUL_PRELUDE.lines() {
+                source_map.add_mapping(current_line, 0);
+                current_line += 1;
+            }
+        }
 
         self.transpile_statements(
             &program.statements,
@@ -84,6 +95,8 @@ impl Transpiler {
                         .collect();
                     let ret_str = if let Some(t) = return_ty {
                         format!(" -> {}", self.transpile_type(t))
+                    } else if self.statement_block_has_value_return(body) {
+                        " -> impl std::fmt::Debug".to_string()
                     } else {
                         String::new()
                     };
@@ -488,6 +501,14 @@ impl Transpiler {
             }
             Expression::Ident(name) => name.clone(),
             Expression::BinaryOp(left, op, right) => {
+                if matches!(op, BinaryOp::MatMul) {
+                    return format!(
+                        "desert_matmul(({}).clone(), ({}).clone())",
+                        self.transpile_expression(left, struct_fields),
+                        self.transpile_expression(right, struct_fields)
+                    );
+                }
+
                 let op_str = match op {
                     BinaryOp::Add => "+",
                     BinaryOp::Sub => "-",
@@ -500,7 +521,7 @@ impl Transpiler {
                     BinaryOp::Lt => "<",
                     BinaryOp::Ge => ">=",
                     BinaryOp::Le => "<=",
-                    BinaryOp::MatMul => "*", // For now map to *
+                    BinaryOp::MatMul => unreachable!("handled above"),
                 };
                 format!(
                     "({} {} {})",
@@ -748,6 +769,108 @@ impl Transpiler {
             Type::UniqueRef(inner) => format!("&mut {}", self.transpile_type(inner)),
         }
     }
+
+    fn statement_block_has_value_return(&self, statements: &[Statement]) -> bool {
+        statements.iter().any(|statement| match &statement.kind {
+            StatementKind::Return(Some(_)) => true,
+            StatementKind::If {
+                then_block,
+                else_block,
+                ..
+            } => {
+                self.statement_block_has_value_return(then_block)
+                    || else_block
+                        .as_ref()
+                        .is_some_and(|block| self.statement_block_has_value_return(block))
+            }
+            StatementKind::For { body, .. }
+            | StatementKind::Def { body, .. }
+            | StatementKind::Protocol { methods: body, .. }
+            | StatementKind::Impl { methods: body, .. } => self.statement_block_has_value_return(body),
+            StatementKind::Match { arms, .. } => arms
+                .iter()
+                .any(|(_, body)| self.statement_block_has_value_return(body)),
+            _ => false,
+        })
+    }
+
+    fn program_uses_matmul(&self, program: &Program) -> bool {
+        program
+            .statements
+            .iter()
+            .any(|statement| self.statement_uses_matmul(statement))
+    }
+
+    fn statement_uses_matmul(&self, statement: &Statement) -> bool {
+        match &statement.kind {
+            StatementKind::Let { value, .. }
+            | StatementKind::Mut { value, .. }
+            | StatementKind::Ref { value, .. }
+            | StatementKind::MutRef { value, .. } => self.expression_uses_matmul(value),
+            StatementKind::Def { body, .. } => body.iter().any(|s| self.statement_uses_matmul(s)),
+            StatementKind::If {
+                condition,
+                then_block,
+                else_block,
+            } => {
+                self.expression_uses_matmul(condition)
+                    || then_block.iter().any(|s| self.statement_uses_matmul(s))
+                    || else_block
+                        .as_ref()
+                        .is_some_and(|b| b.iter().any(|s| self.statement_uses_matmul(s)))
+            }
+            StatementKind::For { iterable, body, .. } => {
+                self.expression_uses_matmul(iterable)
+                    || body.iter().any(|s| self.statement_uses_matmul(s))
+            }
+            StatementKind::Protocol { methods, .. } | StatementKind::Impl { methods, .. } => {
+                methods.iter().any(|s| self.statement_uses_matmul(s))
+            }
+            StatementKind::Match { expression, arms } => {
+                self.expression_uses_matmul(expression)
+                    || arms
+                        .iter()
+                        .any(|(pat, body)| {
+                            self.expression_uses_matmul(pat)
+                                || body.iter().any(|s| self.statement_uses_matmul(s))
+                        })
+            }
+            StatementKind::Return(Some(expr)) | StatementKind::Expr(expr) => {
+                self.expression_uses_matmul(expr)
+            }
+            StatementKind::Struct { .. }
+            | StatementKind::PyImport(_)
+            | StatementKind::Return(None) => false,
+        }
+    }
+
+    fn expression_uses_matmul(&self, expr: &Expression) -> bool {
+        match expr {
+            Expression::BinaryOp(left, op, right) => {
+                matches!(op, BinaryOp::MatMul)
+                    || self.expression_uses_matmul(left)
+                    || self.expression_uses_matmul(right)
+            }
+            Expression::Call(callee, args) | Expression::GenericCall(callee, _, args) => {
+                self.expression_uses_matmul(callee)
+                    || args.iter().any(|arg| self.expression_uses_matmul(arg))
+            }
+            Expression::MacroCall(_, args) => args.iter().any(|arg| self.expression_uses_matmul(arg)),
+            Expression::MemberAccess(expr, _)
+            | Expression::Move(expr)
+            | Expression::SharedRef(expr)
+            | Expression::UniqueRef(expr)
+            | Expression::Question(expr)
+            | Expression::Unwrap(expr) => self.expression_uses_matmul(expr),
+            Expression::Index(expr, idx) => {
+                self.expression_uses_matmul(expr) || self.expression_uses_matmul(idx)
+            }
+            Expression::Literal(Literal::List(items)) => {
+                items.iter().any(|item| self.expression_uses_matmul(item))
+            }
+            Expression::Literal(_) | Expression::Ident(_) => false,
+        }
+    }
 }
 
 impl Default for Transpiler {
@@ -807,7 +930,7 @@ mod tests {
 
         let (rust_code, _) = transpiler.transpile(&program, input.trim());
 
-        let expected = "fn factorial(n) {\n    if (n == 0) {\n        return 1;\n    }\n    return (n * factorial((n - 1)));\n}\n";
+        let expected = "fn factorial(n) -> impl std::fmt::Debug {\n    if (n == 0) {\n        return 1;\n    }\n    return (n * factorial((n - 1)));\n}\n";
 
         assert_eq!(rust_code, expected);
     }
@@ -854,6 +977,18 @@ mod tests {
         let (rust_code, _) = transpiler.transpile(&program, input);
         let expected = "fn main() {\n    println!(\"{}\", vec![\"x\".to_string(), format!(\"{:?}\", val), format!(\"{:?}\", list)].join(\" \"));\n}\n";
         assert_eq!(rust_code, expected);
+    }
+
+    #[test]
+    fn test_transpile_matmul_operator() {
+        let input = "def main():\n    let out = a @ b";
+        let lexer = Lexer::new(input);
+        let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
+        let (_, program) = parse_program(&tokens).unwrap();
+        let transpiler = Transpiler::new();
+        let (rust_code, _) = transpiler.transpile(&program, input);
+        assert!(rust_code.contains("fn desert_matmul"));
+        assert!(rust_code.contains("let out = desert_matmul((a).clone(), (b).clone());"));
     }
 
     #[test]
