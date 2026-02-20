@@ -33,22 +33,26 @@ Core quality checks currently pass:
 ## Recent Cleanup
 
 - Improved CLI diagnostics with line/column parser/lexer errors.
-- `check` now uses unique temp directories, respects Rust 2024 edition, and returns proper failures.
+- `check` now uses unique temp directories, `rustc --emit=metadata`, and isolated rustc outputs in temp dirs.
 - Cleaned parser generic-call flow and pyimport token rendering.
 - Simplified transpiler internals and removed placeholder block output path.
 - Added `Default` implementations and resolved Clippy warnings.
+- Added interpolation-safe `$print` lowering and struct-constructor lowering.
+- Added protocol parameter lowering to Rust `impl Trait`.
+- Added `@` lowering to generated `desert_matmul(...)` helpers.
+- Added `desert check` integration coverage for all examples in `tests/check_examples.rs`.
 
 ## Known Gaps
 
 - No project-level dependency management yet.
 - Resolver is heuristic, not semantic.
 - Mirage translations are simple string rewrites.
-- `@` is tokenized but currently lowered to `*`.
 - Source map is line-based only.
+- Matmul lowering currently targets specific float vector/matrix shapes.
 
 ## Recommended Next Steps
 
-1. Add end-to-end tests for `desert check` against files in `examples/`.
+1. Expand integration checks with negative/failure-path fixtures (expected diagnostics).
 2. Introduce a richer resolver pass with scoped symbols.
 3. Expand Mirage translation with targeted borrow-checker hints.
-4. Decide and implement a concrete lowering strategy for `pyimport` and `@`.
+4. Evolve `pyimport` from comment passthrough to concrete interop scaffolding.

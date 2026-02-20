@@ -12,7 +12,7 @@ The goal is straightforward: keep Rust's performance and ownership model, but ma
   - arithmetic: `+`, `-`, `*`, `/`
   - comparisons: `==`, `!=`, `<`, `<=`, `>`, `>=`
   - assignment in expressions (`=`)
-  - matrix operator token `@` (currently transpiles as `*`)
+  - matrix operator token `@` (currently lowers to generated `desert_matmul(...)` helpers for `Vec<f32>` and `Vec<Vec<f32>>`)
   - indexing: `expr[index]`
   - error operators: `?` and `!!`
   - ownership/borrow markers: `move`, `&`, `~`
@@ -29,7 +29,7 @@ The goal is straightforward: keep Rust's performance and ownership model, but ma
 - `desert transpile <file.ds> [-o file.rs]`
 - `desert check <file.ds>`
 
-`check` transpiles the Desert file, runs `rustc --error-format=json`, and translates diagnostics back to Desert terms where possible.
+`check` transpiles the Desert file, runs `rustc --emit=metadata --error-format=json`, and translates diagnostics back to Desert terms where possible.
 
 ## Current Limits
 
@@ -39,6 +39,7 @@ This is still an experimental compiler frontend. A few important constraints:
 - Type and name resolution are intentionally simple.
 - `pyimport` blocks are preserved as structured comments in Rust output.
 - Source maps are line-based (not full byte-accurate remapping).
+- Matmul lowering is currently specialized to float vector/matrix shapes.
 
 ## Direction
 

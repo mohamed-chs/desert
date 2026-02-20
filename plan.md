@@ -6,7 +6,7 @@ This roadmap focuses on shipping a stable core before expanding syntax.
 
 - Tighten parser/transpiler error messages (line/column + useful context).
 - Add golden tests for transpilation output.
-- Add integration tests for `desert check` on example programs.
+- Add integration tests for `desert check` on example programs. (Done for current `examples/*.ds`)
 - Keep `cargo test` and `cargo clippy` clean.
 
 ## Phase 2: Semantic Resolution
@@ -25,7 +25,7 @@ This roadmap focuses on shipping a stable core before expanding syntax.
 
 - Define a minimal `desert_core` module set.
 - Move `pyimport` from comment passthrough to real interop scaffolding.
-- Define a policy for matrix/tensor operator lowering (`@`).
+- Generalize matrix/tensor operator lowering (`@`) beyond current float vector/matrix helper path.
 
 ## Phase 5: Tooling
 
