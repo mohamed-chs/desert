@@ -14,6 +14,7 @@ type ParserError<'a> = NomErr<NomError<&'a [crate::parser::TokenSpan]>>;
 use clap::Parser;
 use nom::Err as NomErr;
 use nom::error::Error as NomError;
+use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -124,6 +125,7 @@ fn transpile_file(input_content: &str) -> anyhow::Result<(String, crate::sourcem
         }
     }
     let (_, program) = parse_program(&tokens).map_err(|e| format_parse_error(input_content, e))?;
+    validate_program(input_content, &program)?;
     let transpiler = Transpiler::new();
     Ok(transpiler.transpile(&program, input_content))
 }
@@ -164,4 +166,179 @@ fn format_parse_error(input_content: &str, err: ParserError<'_>) -> anyhow::Erro
         }
         NomErr::Incomplete(_) => anyhow::anyhow!("Parsing error: incomplete input"),
     }
+}
+
+#[derive(Debug)]
+struct SemanticError {
+    offset: usize,
+    message: String,
+}
+
+fn validate_program(input_content: &str, program: &crate::ast::Program) -> anyhow::Result<()> {
+    let mut scopes = vec![HashMap::new()];
+    validate_statements(&program.statements, &mut scopes).map_err(|err| {
+        let (line, col) = line_col_from_offset(input_content, err.offset);
+        anyhow::anyhow!(
+            "Semantic error at line {}, column {}: {}",
+            line,
+            col,
+            err.message
+        )
+    })
+}
+
+fn validate_statements(
+    statements: &[crate::ast::Statement],
+    scopes: &mut Vec<HashMap<String, bool>>,
+) -> Result<(), SemanticError> {
+    for stmt in statements {
+        use crate::ast::StatementKind;
+        match &stmt.kind {
+            StatementKind::Let { name, value, .. } => {
+                validate_expression(value, stmt.span.start, scopes)?;
+                declare_mutability(scopes, name, false);
+            }
+            StatementKind::Mut { name, value, .. } => {
+                validate_expression(value, stmt.span.start, scopes)?;
+                declare_mutability(scopes, name, true);
+            }
+            StatementKind::Ref { name, value, .. } | StatementKind::MutRef { name, value, .. } => {
+                validate_expression(value, stmt.span.start, scopes)?;
+                declare_mutability(scopes, name, false);
+            }
+            StatementKind::Def { params, body, .. } => {
+                scopes.push(HashMap::new());
+                for param in params {
+                    declare_mutability(scopes, &param.name, param.is_mut);
+                }
+                validate_statements(body, scopes)?;
+                scopes.pop();
+            }
+            StatementKind::If {
+                condition,
+                then_block,
+                else_block,
+            } => {
+                validate_expression(condition, stmt.span.start, scopes)?;
+                scopes.push(HashMap::new());
+                validate_statements(then_block, scopes)?;
+                scopes.pop();
+                if let Some(block) = else_block {
+                    scopes.push(HashMap::new());
+                    validate_statements(block, scopes)?;
+                    scopes.pop();
+                }
+            }
+            StatementKind::For {
+                var,
+                iterable,
+                body,
+            } => {
+                validate_expression(iterable, stmt.span.start, scopes)?;
+                scopes.push(HashMap::new());
+                declare_mutability(scopes, var, false);
+                validate_statements(body, scopes)?;
+                scopes.pop();
+            }
+            StatementKind::Match { expression, arms } => {
+                validate_expression(expression, stmt.span.start, scopes)?;
+                for (pattern, body) in arms {
+                    validate_expression(pattern, stmt.span.start, scopes)?;
+                    scopes.push(HashMap::new());
+                    validate_statements(body, scopes)?;
+                    scopes.pop();
+                }
+            }
+            StatementKind::Return(Some(expr)) | StatementKind::Expr(expr) => {
+                validate_expression(expr, stmt.span.start, scopes)?;
+            }
+            StatementKind::Impl { methods, .. } | StatementKind::Protocol { methods, .. } => {
+                validate_statements(methods, scopes)?;
+            }
+            StatementKind::Struct { .. } | StatementKind::PyImport(_) | StatementKind::Return(None) => {}
+        }
+    }
+    Ok(())
+}
+
+fn validate_expression(
+    expr: &crate::ast::Expression,
+    offset: usize,
+    scopes: &[HashMap<String, bool>],
+) -> Result<(), SemanticError> {
+    use crate::ast::Expression;
+    match expr {
+        Expression::BinaryOp(left, _, right) => {
+            validate_expression(left, offset, scopes)?;
+            validate_expression(right, offset, scopes)
+        }
+        Expression::Call(callee, args) | Expression::GenericCall(callee, _, args) => {
+            validate_expression(callee, offset, scopes)?;
+            for arg in args {
+                validate_expression(arg, offset, scopes)?;
+            }
+            Ok(())
+        }
+        Expression::MacroCall(_, args) | Expression::Literal(crate::ast::Literal::List(args)) => {
+            for arg in args {
+                validate_expression(arg, offset, scopes)?;
+            }
+            Ok(())
+        }
+        Expression::Move(inner) => {
+            validate_mutable_binding(inner, scopes, "move", offset)?;
+            validate_expression(inner, offset, scopes)
+        }
+        Expression::UniqueRef(inner) => {
+            validate_mutable_binding(inner, scopes, "~", offset)?;
+            validate_expression(inner, offset, scopes)
+        }
+        Expression::MemberAccess(inner, _)
+        | Expression::SharedRef(inner)
+        | Expression::Question(inner)
+        | Expression::Unwrap(inner) => validate_expression(inner, offset, scopes),
+        Expression::Index(inner, index) => {
+            validate_expression(inner, offset, scopes)?;
+            validate_expression(index, offset, scopes)
+        }
+        Expression::Literal(_) | Expression::Ident(_) => Ok(()),
+    }
+}
+
+fn validate_mutable_binding(
+    expr: &crate::ast::Expression,
+    scopes: &[HashMap<String, bool>],
+    op_name: &str,
+    offset: usize,
+) -> Result<(), SemanticError> {
+    match expr {
+        crate::ast::Expression::Ident(name) => {
+            if is_mutable(name, scopes) {
+                Ok(())
+            } else {
+                Err(SemanticError {
+                    offset,
+                    message: format!(
+                        "`{}` requires mutable binding `{}` (declare with `mut` first)",
+                        op_name, name
+                    ),
+                })
+            }
+        }
+        _ => Ok(()),
+    }
+}
+
+fn declare_mutability(scopes: &mut [HashMap<String, bool>], name: &str, is_mut: bool) {
+    if let Some(scope) = scopes.last_mut() {
+        scope.insert(name.to_string(), is_mut);
+    }
+}
+
+fn is_mutable(name: &str, scopes: &[HashMap<String, bool>]) -> bool {
+    scopes
+        .iter()
+        .rev()
+        .find_map(|scope| scope.get(name).copied())
+        .unwrap_or(false)
 }

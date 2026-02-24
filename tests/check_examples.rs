@@ -99,12 +99,20 @@ fn check_reports_move_mutability_failure_with_desert_line_mapping() {
         .arg("tests/fixtures/check_fail_move_requires_mut.ds");
     cmd.assert()
         .failure()
-        .stdout(predicates::str::contains(
-            "cannot borrow `xs` as mutable, as it is not declared as mutable",
-        ))
-        .stdout(predicates::str::contains("Line 3: in Desert source"))
         .stderr(predicates::str::contains(
-            "Rust check failed with translated diagnostics.",
+            "Semantic error at line 3, column 5: `move` requires mutable binding `xs`",
+        ));
+}
+
+#[test]
+fn check_reports_unique_ref_mutability_failure_with_desert_location() {
+    let mut cmd = cargo_bin_cmd!("desert");
+    cmd.arg("check")
+        .arg("tests/fixtures/check_fail_unique_ref_requires_mut.ds");
+    cmd.assert()
+        .failure()
+        .stderr(predicates::str::contains(
+            "Semantic error at line 2, column 1: `~` requires mutable binding `x`",
         ));
 }
 
