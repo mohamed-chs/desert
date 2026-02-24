@@ -19,6 +19,7 @@ This roadmap focuses on shipping a stable core before expanding syntax.
 ## Phase 3: Mirage Quality
 
 - Improve diagnostic rewrites beyond token replacement.
+- Add explicit, code-driven hints for common rustc diagnostics. (Initial `E0308`/`E0596`/`E0599` support added)
 - Map more Rust concepts back to Desert phrasing.
 - Include actionable hints in translated errors.
 

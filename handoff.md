@@ -42,6 +42,7 @@ Core quality checks currently pass:
 - Added `@` lowering to generated `desert_matmul(...)` helpers.
 - Added `desert check` integration coverage for all examples in `tests/check_examples.rs`.
 - Added negative `desert check` integration fixtures to assert translated rustc diagnostics for type mismatch, mutability borrow errors, and method-resolution failures, plus parser/lexer location errors.
+- Added explicit Mirage hints keyed by rustc error codes (`E0308`, `E0596`, `E0599`) with unit tests.
 
 ## Known Gaps
 
@@ -55,5 +56,5 @@ Core quality checks currently pass:
 
 1. Expand integration checks with more negative/failure-path fixtures (expected diagnostics), especially protocol/trait bound and lifetime-oriented failures.
 2. Introduce a richer resolver pass with scoped symbols.
-3. Expand Mirage translation with targeted borrow-checker hints.
+3. Expand Mirage translation with more targeted hints (beyond current `E0308`/`E0596`/`E0599` coverage).
 4. Evolve `pyimport` from comment passthrough to concrete interop scaffolding.
