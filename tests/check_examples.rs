@@ -388,3 +388,38 @@ fn new_rejects_non_empty_directory_without_force() {
 
     let _ = fs::remove_dir_all(&project_dir);
 }
+
+#[test]
+fn fmt_rewrites_unformatted_file() {
+    let file = unique_temp_path("desert_fmt_file").with_extension("ds");
+    fs::write(&file, "def main():\n    mut x=1\n    if x>0:\n        $print(\"ok\")\n").unwrap();
+
+    let mut cmd = cargo_bin_cmd!("desert");
+    cmd.arg("fmt").arg(&file);
+    cmd.assert()
+        .success()
+        .stdout(predicates::str::contains("Formatted 1 file(s)."));
+
+    let formatted = fs::read_to_string(&file).unwrap();
+    assert_eq!(
+        formatted,
+        "def main():\n    mut x = 1\n    if x > 0:\n        $print(\"ok\")\n"
+    );
+
+    let _ = fs::remove_file(&file);
+}
+
+#[test]
+fn fmt_check_fails_when_file_needs_formatting() {
+    let file = unique_temp_path("desert_fmt_check").with_extension("ds");
+    fs::write(&file, "def main():\n    mut x=1\n").unwrap();
+
+    let mut cmd = cargo_bin_cmd!("desert");
+    cmd.arg("fmt").arg(&file).arg("--check");
+    cmd.assert()
+        .failure()
+        .stdout(predicates::str::contains(file.display().to_string()))
+        .stderr(predicates::str::contains("format check failed"));
+
+    let _ = fs::remove_file(&file);
+}

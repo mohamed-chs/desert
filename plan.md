@@ -17,12 +17,12 @@ This roadmap follows current project direction: prioritize project workflow and 
 - Implement first-pass module/import graph loader with cycle detection. (Done)
 - Add direct execution workflow (`desert run <file|project> [-- args...]`). (Done)
 - Add zero-config project scaffolding (`desert new <path>`). (Done)
+- Add formatter scaffold and stable style output. (Done)
 - Keep transpilation predictable and readable while introducing cross-file compilation order.
 - Preserve current lowering conventions while scaling from single-file to project mode.
 
 ## Phase B: Tooling Basics (Parallel to Phase A)
 
-- Add formatter scaffold and stable style output.
 - Add project-graph check mode and cache-key groundwork for faster `check` loops. (Graph command done)
 - Add CI-facing commands that separate syntax, semantic prechecks, and rustc-backed checking.
 

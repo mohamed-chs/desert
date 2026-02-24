@@ -1,4 +1,5 @@
 pub mod ast;
+pub mod formatter;
 pub mod lexer;
 pub mod mirage;
 pub mod parser;
@@ -59,6 +60,14 @@ enum Commands {
         /// Allow scaffolding into an existing non-empty directory
         #[arg(long)]
         force: bool,
+    },
+    /// Format Desert source files
+    Fmt {
+        /// Input .ds file or directory (formats all .ds files recursively)
+        input: PathBuf,
+        /// Check mode: fail if any file would be reformatted
+        #[arg(long)]
+        check: bool,
     },
     /// Print resolved import graph order for a project
     Graph {
@@ -146,6 +155,36 @@ fn main() -> anyhow::Result<()> {
             println!("Next steps:");
             println!("  cd {}", path.display());
             println!("  desert run .");
+        }
+        Commands::Fmt { input, check } => {
+            let files = collect_ds_files(&input)?;
+            let mut changed_files = Vec::new();
+            for file in files {
+                let source = fs::read_to_string(&file)?;
+                let formatted = format_source(&source)?;
+                if formatted != source {
+                    changed_files.push(file.clone());
+                    if !check {
+                        fs::write(&file, formatted)?;
+                    }
+                }
+            }
+
+            if check {
+                if changed_files.is_empty() {
+                    println!("Formatting check passed.");
+                } else {
+                    for file in &changed_files {
+                        println!("{}", file.display());
+                    }
+                    anyhow::bail!(
+                        "format check failed: {} file(s) need formatting",
+                        changed_files.len()
+                    );
+                }
+            } else {
+                println!("Formatted {} file(s).", changed_files.len());
+            }
         }
     }
 
@@ -397,6 +436,11 @@ fn transpile_file(input_source: &InputSource) -> anyhow::Result<(String, crate::
     ))
 }
 
+fn format_source(input_content: &str) -> anyhow::Result<String> {
+    let program = parse_source(input_content)?;
+    Ok(crate::formatter::format_program(&program))
+}
+
 fn parse_source(input_content: &str) -> anyhow::Result<crate::ast::Program> {
     let mut tokens = Vec::new();
     let mut lexer = Lexer::new(input_content);
@@ -429,6 +473,43 @@ fn unique_temp_dir() -> PathBuf {
         .map(|d| d.as_nanos())
         .unwrap_or(0);
     std::env::temp_dir().join(format!("desert_check_{}_{}", std::process::id(), nanos))
+}
+
+fn collect_ds_files(input: &Path) -> anyhow::Result<Vec<PathBuf>> {
+    if input.is_file() {
+        if input.extension().is_some_and(|ext| ext == "ds") {
+            return Ok(vec![input.to_path_buf()]);
+        }
+        anyhow::bail!("format input '{}' must be a .ds file", input.display());
+    }
+
+    if !input.is_dir() {
+        anyhow::bail!(
+            "format input '{}' is neither a file nor a directory",
+            input.display()
+        );
+    }
+
+    let mut files = Vec::new();
+    collect_ds_files_recursive(input, &mut files)?;
+    files.sort();
+    if files.is_empty() {
+        anyhow::bail!("no .ds files found under '{}'", input.display());
+    }
+    Ok(files)
+}
+
+fn collect_ds_files_recursive(root: &Path, files: &mut Vec<PathBuf>) -> anyhow::Result<()> {
+    for entry in fs::read_dir(root)? {
+        let entry = entry?;
+        let path = entry.path();
+        if path.is_dir() {
+            collect_ds_files_recursive(&path, files)?;
+        } else if path.extension().is_some_and(|ext| ext == "ds") {
+            files.push(path);
+        }
+    }
+    Ok(())
 }
 
 fn scaffold_project(path: &Path, force: bool) -> anyhow::Result<()> {
