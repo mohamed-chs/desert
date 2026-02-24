@@ -8,8 +8,6 @@ pub enum Token {
     Let,
     #[token("mut")]
     Mut,
-    #[token("ref")]
-    Ref,
     #[token("move")]
     Move,
     #[token("def")]

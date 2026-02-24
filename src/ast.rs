@@ -103,16 +103,6 @@ pub enum StatementKind {
         for_type: String,
         methods: Vec<Statement>,
     },
-    Ref {
-        name: String,
-        ty: Option<Type>,
-        value: Expression,
-    },
-    MutRef {
-        name: String,
-        ty: Option<Type>,
-        value: Expression,
-    },
     Match {
         expression: Expression,
         arms: Vec<(Expression, Vec<Statement>)>, // (pattern, body)

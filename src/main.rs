@@ -202,10 +202,6 @@ fn validate_statements(
                 validate_expression(value, stmt.span.start, scopes)?;
                 declare_mutability(scopes, name, true);
             }
-            StatementKind::Ref { name, value, .. } | StatementKind::MutRef { name, value, .. } => {
-                validate_expression(value, stmt.span.start, scopes)?;
-                declare_mutability(scopes, name, false);
-            }
             StatementKind::Def { params, body, .. } => {
                 scopes.push(HashMap::new());
                 for param in params {

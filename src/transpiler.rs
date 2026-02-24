@@ -315,26 +315,6 @@ impl Transpiler {
                     source_map.add_mapping(*current_line, ds_line);
                     *current_line += 3;
                 }
-                StatementKind::Ref {
-                    name: _,
-                    ty: _,
-                    value: _,
-                } => {
-                    let stmt_output = self.transpile_statement(stmt, indent, struct_fields, resolver);
-                    output.push_str(&stmt_output);
-                    source_map.add_mapping(*current_line, ds_line);
-                    *current_line += 1;
-                }
-                StatementKind::MutRef {
-                    name: _,
-                    ty: _,
-                    value: _,
-                } => {
-                    let stmt_output = self.transpile_statement(stmt, indent, struct_fields, resolver);
-                    output.push_str(&stmt_output);
-                    source_map.add_mapping(*current_line, ds_line);
-                    *current_line += 1;
-                }
                 StatementKind::Match { expression, arms } => {
                     let ds_line = source[..stmt.span.start].lines().count().saturating_sub(1);
                     let header = format!(
@@ -443,34 +423,6 @@ impl Transpiler {
             }
             StatementKind::PyImport(content) => {
                 format!("{}/* Desert PyImport block: {} */\n", indent_str, content)
-            }
-            StatementKind::Ref { name, ty, value } => {
-                let ty_str = if let Some(t) = ty {
-                    format!(": {}", self.transpile_type(t))
-                } else {
-                    String::new()
-                };
-                format!(
-                    "{}let {} {} = &{};\n",
-                    indent_str,
-                    name,
-                    ty_str,
-                    self.transpile_expression(value, struct_fields, resolver)
-                )
-            }
-            StatementKind::MutRef { name, ty, value } => {
-                let ty_str = if let Some(t) = ty {
-                    format!(": {}", self.transpile_type(t))
-                } else {
-                    String::new()
-                };
-                format!(
-                    "{}let {} {} = &mut {};\n",
-                    indent_str,
-                    name,
-                    ty_str,
-                    self.transpile_expression(value, struct_fields, resolver)
-                )
             }
             StatementKind::Match { expression, arms } => {
                 let mut output = format!(
@@ -744,9 +696,7 @@ impl Transpiler {
     fn declare_statement_symbols(&self, stmt: &Statement, resolver: &mut Resolver) {
         match &stmt.kind {
             StatementKind::Let { name, .. }
-            | StatementKind::Mut { name, .. }
-            | StatementKind::Ref { name, .. }
-            | StatementKind::MutRef { name, .. } => resolver.declare_value(name),
+            | StatementKind::Mut { name, .. } => resolver.declare_value(name),
             StatementKind::Def { name, .. } => resolver.declare_value(name),
             StatementKind::Struct { name, .. } | StatementKind::Protocol { name, .. } => {
                 resolver.declare_type(name)
@@ -871,10 +821,9 @@ impl Transpiler {
 
     fn statement_uses_matmul(&self, statement: &Statement) -> bool {
         match &statement.kind {
-            StatementKind::Let { value, .. }
-            | StatementKind::Mut { value, .. }
-            | StatementKind::Ref { value, .. }
-            | StatementKind::MutRef { value, .. } => self.expression_uses_matmul(value),
+            StatementKind::Let { value, .. } | StatementKind::Mut { value, .. } => {
+                self.expression_uses_matmul(value)
+            }
             StatementKind::Def { body, .. } => body.iter().any(|s| self.statement_uses_matmul(s)),
             StatementKind::If {
                 condition,
@@ -1107,6 +1056,18 @@ mod tests {
         let transpiler = Transpiler::new();
         let (rust_code, _) = transpiler.transpile(&program, input);
         let expected = "let mut x = 10;\nlet y = std::mem::take(&mut x);\n";
+        assert_eq!(rust_code, expected);
+    }
+
+    #[test]
+    fn test_transpile_borrow_bindings_with_let() {
+        let input = "mut x = 1\nlet shared: &i32 = &x\nlet unique: ~i32 = ~x";
+        let lexer = Lexer::new(input);
+        let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
+        let (_, program) = parse_program(&tokens).unwrap();
+        let transpiler = Transpiler::new();
+        let (rust_code, _) = transpiler.transpile(&program, input);
+        let expected = "let mut x = 1;\nlet shared: &i32 = &x;\nlet unique: &mut i32 = &mut x;\n";
         assert_eq!(rust_code, expected);
     }
 

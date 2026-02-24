@@ -382,37 +382,6 @@ fn mut_statement(input: &[TokenSpan]) -> ParseResult<'_, StatementKind> {
     Ok((input, StatementKind::Mut { name, ty, value }))
 }
 
-fn ref_statement(input: &[TokenSpan]) -> ParseResult<'_, StatementKind> {
-    let (input, _) = token(Token::Ref)(input)?;
-    let (input, name) = ident(input)?;
-    let mut current_input = input;
-    let mut ty = None;
-    if let Ok((next_input, _)) = token(Token::Colon)(current_input) {
-        let (next_input, t) = parse_type(next_input)?;
-        ty = Some(t);
-        current_input = next_input;
-    }
-    let (input, _) = token(Token::Assign)(current_input)?;
-    let (input, value) = expression(input)?;
-    Ok((input, StatementKind::Ref { name, ty, value }))
-}
-
-fn mut_ref_statement(input: &[TokenSpan]) -> ParseResult<'_, StatementKind> {
-    let (input, _) = token(Token::Mut)(input)?;
-    let (input, _) = token(Token::Ref)(input)?;
-    let (input, name) = ident(input)?;
-    let mut current_input = input;
-    let mut ty = None;
-    if let Ok((next_input, _)) = token(Token::Colon)(current_input) {
-        let (next_input, t) = parse_type(next_input)?;
-        ty = Some(t);
-        current_input = next_input;
-    }
-    let (input, _) = token(Token::Assign)(current_input)?;
-    let (input, value) = expression(input)?;
-    Ok((input, StatementKind::MutRef { name, ty, value }))
-}
-
 fn block(input: &[TokenSpan]) -> ParseResult<'_, Vec<Statement>> {
     let (input, _) = token(Token::Indent)(input)?;
     let mut statements = Vec::new();
@@ -619,7 +588,6 @@ fn token_text(token: &Token) -> String {
     match token {
         Token::Let => "let".to_string(),
         Token::Mut => "mut".to_string(),
-        Token::Ref => "ref".to_string(),
         Token::Move => "move".to_string(),
         Token::Def => "def".to_string(),
         Token::Protocol => "protocol".to_string(),
@@ -725,10 +693,6 @@ fn statement(input: &[TokenSpan]) -> ParseResult<'_, Statement> {
     let (rest, kind) = if let Ok((rest, kind)) = let_statement(input) {
         (rest, kind)
     } else if let Ok((rest, kind)) = mut_statement(input) {
-        (rest, kind)
-    } else if let Ok((rest, kind)) = ref_statement(input) {
-        (rest, kind)
-    } else if let Ok((rest, kind)) = mut_ref_statement(input) {
         (rest, kind)
     } else if let Ok((rest, kind)) = def_statement(input) {
         (rest, kind)
@@ -1048,11 +1012,23 @@ mut w = 10
     }
 
     #[test]
-    fn test_parse_ref_statement() {
-        let input = "ref x = y.z";
+    fn test_parse_borrow_binding_expression() {
+        let input = "let x: &i32 = &y\nlet y: ~i32 = ~z";
         let lexer = Lexer::new(input);
         let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
         let (_, program) = parse_program(&tokens).unwrap();
-        assert_eq!(program.statements.len(), 1);
+        assert_eq!(program.statements.len(), 2);
+    }
+
+    #[test]
+    fn test_parse_ref_as_identifier() {
+        let input = "let ref = 1";
+        let lexer = Lexer::new(input);
+        let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
+        let (_, program) = parse_program(&tokens).unwrap();
+        match &program.statements[0].kind {
+            StatementKind::Let { name, .. } => assert_eq!(name, "ref"),
+            _ => panic!("Expected Let statement"),
+        }
     }
 }
