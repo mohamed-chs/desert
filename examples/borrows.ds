@@ -10,8 +10,12 @@ def main():
     # Pure value update
     count = increment(count)
 
-    # Passing a shared reference (immutable borrow)
-    display(&count)
+    # Borrow bindings are expression-based
+    let shared: &i32 = &count
+    display(shared)
+
+    let unique: ~i32 = ~count
+    $print("Unique view: {unique}")
 
     # Moving ownership
     let new_count = move count

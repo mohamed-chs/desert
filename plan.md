@@ -1,42 +1,37 @@
 # Desert Roadmap
 
-This roadmap focuses on shipping a stable core before expanding syntax.
+This roadmap assumes deliberate breaking changes when they reduce syntax overlap or compiler branching.
 
-## Phase 1: Compiler Stability
+## Phase 1: Semantic Core Simplification
 
-- Tighten parser/transpiler error messages (line/column + useful context).
-- Add golden tests for transpilation output.
-- Add integration tests for `desert check` on example programs. (Done for current `examples/*.ds`)
-- Add integration tests for `desert check` failure paths and translated diagnostics. (Type mismatch + parser + lexer + borrow mutability + method-resolution fixtures added)
-- Keep `cargo test` and `cargo clippy` clean.
+- Keep one canonical binding path (`let`/`mut` only). (Done for borrow declarations: removed statement-level `ref`/`mut ref`)
+- Keep ownership operations expression-based (`move`, `&`, `~`) with explicit pre-emit validation.
+- Continue pruning overlapping forms that lower to identical Rust.
 
-## Phase 2: Semantic Resolution
+## Phase 2: Resolution and Type Semantics
 
-- Replace capitalization heuristics with scoped symbol tracking. (Done: static receiver lowering now depends on declared/built-in type symbols, not uppercase naming)
-- Improve generic resolution for static functions vs methods.
-- Validate `move` usage and borrow forms more explicitly before Rust emit. (Now rejects `move x` / `~x` when `x` is not declared `mut`, and rejects non-place operands like `move foo()` / `~foo()`, before rustc)
+- Extend resolver from receiver classification into symbol/type validation.
+- Add explicit semantic checks for callable/member/index targets before Rust emit.
+- Keep precedence and lowering conventions explicit and test-backed.
 
-## Phase 3: Mirage Quality
+## Phase 3: Diagnostics and Mirage
 
-- Improve diagnostic rewrites beyond token replacement.
-- Add explicit, code-driven hints for common rustc diagnostics. (Initial `E0308`/`E0596`/`E0599` support added)
-- Map more Rust concepts back to Desert phrasing.
-- Include actionable hints in translated errors.
+- Expand rustc code-specific hints beyond `E0308`/`E0596`/`E0599`.
+- Improve source remapping precision from line-based toward span-aware mapping.
+- Emit direct “Desert-level” fix suggestions for common ownership/type failures.
 
-## Phase 4: Interop and Standard Surface
+## Phase 4: Interop and Runtime Surface
 
-- Define a minimal `desert_core` module set.
-- Move `pyimport` from comment passthrough to real interop scaffolding.
-- Generalize matrix/tensor operator lowering (`@`) beyond current float vector/matrix helper path.
+- Replace `pyimport` comment passthrough with executable interop scaffolding.
+- Define a minimal `desert_core` surface aligned with current lowering rules.
+- Generalize `@` lowering beyond current float vector/matrix helper coverage.
 
 ## Phase 5: Tooling
 
-- Add formatter pass for canonical Desert style.
-- Evaluate an LSP path once grammar and diagnostics stabilize.
+- Add formatting and style normalization.
+- Add language-server-grade parse/diagnostic services once semantics settle.
 
 ## Delivery Notes
 
-- Keep feature work test-first where possible.
-- Avoid broad syntax expansion until diagnostics and resolution are reliable.
-- Update docs/examples with each behavior change so drift stays low.
-- In normal forward-progress turns, ship behavior first; avoid test/docs-only iterations unless explicitly requested.
+- Behavior changes ship first; tests/docs track the shipped semantics in the same pass.
+- Backward compatibility is not a goal unless explicitly reintroduced.

@@ -5,7 +5,8 @@ Desert is an indentation-based language that transpiles to Rust, combining Pytho
 ## Features
 
 - **Syntax**: Indentation-driven blocks (`if`, `def`, `struct`, `impl`, etc.).
-- **Ownership**: Explicit `move`, `&` (shared), and `~` (unique) markers.
+- **Bindings**: Canonical declarations with `let` and `mut`.
+- **Ownership**: Explicit `move`, `&` (shared), and `~` (unique) expression markers.
 - **Generics**: Bracketed syntax (e.g., `List[T]`).
 - **Math**: Native `@` operator for matrix multiplication.
 - **Diagnostics**: Mirage layer translates Rust compiler errors back to Desert terms.

@@ -4,6 +4,8 @@
 
 Desert is a working prototype compiler frontend written in Rust. It lexes/parses `.ds` source, transpiles to Rust, and can run Rust type checks while translating diagnostics into Desert-friendly wording.
 
+Project direction now favors semantic simplification over compatibility. Breaking grammar/lowering changes are expected when they reduce duplicate forms.
+
 Core quality checks currently pass:
 
 - `cargo test`
@@ -22,7 +24,7 @@ Core quality checks currently pass:
 
 ## Implemented Language Surface
 
-- Declarations: `let`, `mut`, `ref`, `mut ref`
+- Declarations: `let`, `mut`
 - Control flow: `if/else`, `for`, `match`
 - Definitions: `def`, `struct`, `protocol`, `impl`
 - Expressions: literals, calls, member access, generic calls, indexing, assignment
@@ -46,6 +48,7 @@ Core quality checks currently pass:
 - Replaced resolver capitalization heuristics with scoped symbol tracking for unified-dot lowering, including shadowing-aware behavior.
 - Removed uppercase fallback in receiver classification; static `Type.method` lowering now requires declared or built-in type symbols (for example, `Box`).
 - Added pre-Rust semantic validation for mutability-sensitive forms so `move x` and `~x` fail fast with Desert line/column errors when `x` is not declared `mut`, and now also reject non-place operands such as `move foo()` or `~foo()`.
+- Removed statement-level borrow declarations (`ref`, `mut ref`) from AST/parser/transpiler. Borrow binding is now expression-only (`let a = &x`, `let b = ~x`), and `ref` is no longer a reserved keyword.
 
 ## Known Gaps
 
@@ -57,7 +60,7 @@ Core quality checks currently pass:
 
 ## Recommended Next Steps
 
-1. Expand integration checks with more negative/failure-path fixtures (expected diagnostics), especially protocol/trait bound and lifetime-oriented failures.
-2. Extend resolver beyond dot-receiver classification into broader semantic checks (symbol/type validation before Rust emit).
-3. Expand Mirage translation with more targeted hints (beyond current `E0308`/`E0596`/`E0599` coverage).
-4. Evolve `pyimport` from comment passthrough to concrete interop scaffolding.
+1. Continue syntax pruning where two forms map to one Rust lowering path.
+2. Extend semantic validation to catch more failures before `rustc`.
+3. Expand Mirage hints with ownership/lifetime-oriented guidance.
+4. Convert `pyimport` into executable interop scaffolding.
