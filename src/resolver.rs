@@ -19,6 +19,7 @@ impl Resolver {
         type_names.insert("Str".to_string());
         type_names.insert("List".to_string());
         type_names.insert("Dict".to_string());
+        type_names.insert("Box".to_string());
 
         Self {
             type_names,
@@ -51,7 +52,7 @@ impl Resolver {
     }
 
     fn is_type_name(&self, name: &str) -> bool {
-        self.type_names.contains(name) || name.chars().next().is_some_and(|c| c.is_uppercase())
+        self.type_names.contains(name)
     }
 
     pub fn is_static_receiver(&self, expr: &Expression) -> bool {
@@ -94,5 +95,11 @@ mod tests {
 
         resolver.leave_scope();
         assert!(resolver.is_static_receiver(&Expression::Ident("Path".to_string())));
+    }
+
+    #[test]
+    fn uppercase_name_is_not_treated_as_type_without_declaration() {
+        let resolver = Resolver::new();
+        assert!(!resolver.is_static_receiver(&Expression::Ident("Path".to_string())));
     }
 }

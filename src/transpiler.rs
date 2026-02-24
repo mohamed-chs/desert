@@ -1113,7 +1113,7 @@ mod tests {
     #[test]
 
     fn test_transpile_unified_dot() {
-        let input = "let x = Path.new(\"foo\")\nlet y = x.exists()";
+        let input = "struct Path:\n    raw: Str\nlet x = Path.new(\"foo\")\nlet y = x.exists()";
 
         let lexer = Lexer::new(input);
 
@@ -1127,7 +1127,7 @@ mod tests {
 
         assert_eq!(
             rust_code,
-            "let x = Path::new(\"foo\".to_string());\nlet y = x.exists();\n"
+            "struct Path {\n    pub raw: String,\n}\nlet x = Path::new(\"foo\".to_string());\nlet y = x.exists();\n"
         );
     }
 
@@ -1145,14 +1145,28 @@ mod tests {
 
     #[test]
     fn test_transpile_unified_dot_shadowing_is_scoped() {
-        let input = "if 1 == 1:\n    let Path = 1\nlet y = Path.new()";
+        let input = "struct Path:\n    raw: Str\nif 1 == 1:\n    let Path = 1\nlet y = Path.new()";
         let lexer = Lexer::new(input);
         let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
         let (_, program) = parse_program(&tokens).unwrap();
         let transpiler = Transpiler::new();
         let (rust_code, _) = transpiler.transpile(&program, input);
 
-        assert_eq!(rust_code, "if (1 == 1) {\n    let Path = 1;\n}\nlet y = Path::new();\n");
+        assert_eq!(
+            rust_code,
+            "struct Path {\n    pub raw: String,\n}\nif (1 == 1) {\n    let Path = 1;\n}\nlet y = Path::new();\n"
+        );
+    }
+
+    #[test]
+    fn test_transpile_unified_dot_without_type_declaration_stays_method_call() {
+        let input = "let y = Path.new()";
+        let lexer = Lexer::new(input);
+        let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
+        let (_, program) = parse_program(&tokens).unwrap();
+        let transpiler = Transpiler::new();
+        let (rust_code, _) = transpiler.transpile(&program, input);
+        assert_eq!(rust_code, "let y = Path.new();\n");
     }
 
     #[test]

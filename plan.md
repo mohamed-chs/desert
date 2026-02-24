@@ -12,7 +12,7 @@ This roadmap focuses on shipping a stable core before expanding syntax.
 
 ## Phase 2: Semantic Resolution
 
-- Replace capitalization heuristics with scoped symbol tracking.
+- Replace capitalization heuristics with scoped symbol tracking. (Done: static receiver lowering now depends on declared/built-in type symbols, not uppercase naming)
 - Improve generic resolution for static functions vs methods.
 - Validate `move` usage and borrow forms more explicitly before Rust emit. (Now rejects `move x` / `~x` when `x` is not declared `mut`, and rejects non-place operands like `move foo()` / `~foo()`, before rustc)
 

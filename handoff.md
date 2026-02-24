@@ -15,7 +15,7 @@ Core quality checks currently pass:
 - `src/ast.rs`: AST definitions for statements, expressions, and types with source spans.
 - `src/parser.rs`: Recursive-descent parser over token spans.
 - `src/transpiler.rs`: AST to Rust code generation plus source map creation.
-- `src/resolver.rs`: Lightweight type/name heuristic for unified-dot lowering.
+- `src/resolver.rs`: Lightweight scoped type/value symbol tracker for unified-dot lowering.
 - `src/sourcemap.rs`: Line-based Rust-to-Desert mapping.
 - `src/mirage.rs`: Rust diagnostic translation to Desert terminology.
 - `src/main.rs`: CLI entry point (`transpile`, `check`) and diagnostics plumbing.
@@ -44,6 +44,7 @@ Core quality checks currently pass:
 - Added negative `desert check` integration fixtures to assert translated rustc diagnostics for type mismatch, mutability borrow errors, and method-resolution failures, plus parser/lexer location errors.
 - Added explicit Mirage hints keyed by rustc error codes (`E0308`, `E0596`, `E0599`) with unit tests.
 - Replaced resolver capitalization heuristics with scoped symbol tracking for unified-dot lowering, including shadowing-aware behavior.
+- Removed uppercase fallback in receiver classification; static `Type.method` lowering now requires declared or built-in type symbols (for example, `Box`).
 - Added pre-Rust semantic validation for mutability-sensitive forms so `move x` and `~x` fail fast with Desert line/column errors when `x` is not declared `mut`, and now also reject non-place operands such as `move foo()` or `~foo()`.
 
 ## Known Gaps
