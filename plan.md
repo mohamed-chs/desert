@@ -21,7 +21,7 @@ This roadmap follows current project direction: prioritize project workflow and 
 ## Phase B: Tooling Basics (Parallel to Phase A)
 
 - Add formatter scaffold and stable style output.
-- Add project-graph check mode and cache-key groundwork for faster `check` loops.
+- Add project-graph check mode and cache-key groundwork for faster `check` loops. (Graph command done)
 - Add CI-facing commands that separate syntax, semantic prechecks, and rustc-backed checking.
 
 ## Phase C: Diagnostics Upgrade (Staged, Optional While A/B Run)

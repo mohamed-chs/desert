@@ -36,6 +36,7 @@ The design priority is explicit semantics with predictable lowering. Syntax that
 - `desert check <file.ds>`
 - `desert transpile <project_dir>` with `desert.toml`/`Desert.toml` (`[package].entry`, default `src/main.ds`)
 - `desert check <project_dir>` with the same project entry resolution
+- `desert graph <project_dir>` to print resolved import load order
 
 Project mode resolves top-level `import` statements recursively, loads imported files before importers, and rejects import cycles.
 

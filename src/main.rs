@@ -43,6 +43,11 @@ enum Commands {
         /// Input .ds file
         input: PathBuf,
     },
+    /// Print resolved import graph order for a project
+    Graph {
+        /// Project directory containing desert.toml/Desert.toml
+        input: PathBuf,
+    },
 }
 
 fn main() -> anyhow::Result<()> {
@@ -98,6 +103,13 @@ fn main() -> anyhow::Result<()> {
             }
 
             println!("Check passed.");
+        }
+        Commands::Graph { input } => {
+            let (project_root, ordered_files) = resolve_project_graph(&input)?;
+            for file in ordered_files {
+                let display_path = file.strip_prefix(&project_root).unwrap_or(file.as_path());
+                println!("{}", display_path.display());
+            }
         }
     }
 
@@ -161,6 +173,22 @@ fn resolve_project_entry(project_root: &Path) -> anyhow::Result<PathBuf> {
 }
 
 fn load_project_source(project_root: &Path) -> anyhow::Result<String> {
+    let (_, ordered_files) = resolve_project_graph(project_root)?;
+    let mut pieces = Vec::with_capacity(ordered_files.len());
+    for file in ordered_files {
+        pieces.push(fs::read_to_string(file)?);
+    }
+    Ok(pieces.join("\n\n"))
+}
+
+fn resolve_project_graph(project_root: &Path) -> anyhow::Result<(PathBuf, Vec<PathBuf>)> {
+    if !project_root.is_dir() {
+        anyhow::bail!(
+            "graph input '{}' must be a project directory",
+            project_root.display()
+        );
+    }
+
     let canonical_root = project_root.canonicalize().map_err(|err| {
         anyhow::anyhow!(
             "failed to resolve project root '{}': {}",
@@ -172,17 +200,17 @@ fn load_project_source(project_root: &Path) -> anyhow::Result<String> {
     let entry_path = resolve_project_entry(&canonical_root)?;
     let mut visited = HashSet::new();
     let mut loading = Vec::new();
-    let mut ordered_sources = Vec::new();
+    let mut ordered_files = Vec::new();
 
     collect_project_sources(
         &entry_path,
         &canonical_root,
         &mut visited,
         &mut loading,
-        &mut ordered_sources,
+        &mut ordered_files,
     )?;
 
-    Ok(ordered_sources.join("\n\n"))
+    Ok((canonical_root, ordered_files))
 }
 
 fn collect_project_sources(
@@ -190,7 +218,7 @@ fn collect_project_sources(
     project_root: &Path,
     visited: &mut HashSet<PathBuf>,
     loading: &mut Vec<PathBuf>,
-    ordered_sources: &mut Vec<String>,
+    ordered_files: &mut Vec<PathBuf>,
 ) -> anyhow::Result<()> {
     let canonical_file = file_path.canonicalize().map_err(|err| {
         anyhow::anyhow!(
@@ -228,19 +256,13 @@ fn collect_project_sources(
     for stmt in &program.statements {
         if let crate::ast::StatementKind::Import(path) = &stmt.kind {
             let import_path = resolve_import_path(&canonical_file, path, project_root)?;
-            collect_project_sources(
-                &import_path,
-                project_root,
-                visited,
-                loading,
-                ordered_sources,
-            )?;
+            collect_project_sources(&import_path, project_root, visited, loading, ordered_files)?;
         }
     }
 
     loading.pop();
     visited.insert(canonical_file);
-    ordered_sources.push(source);
+    ordered_files.push(file_path.canonicalize()?);
     Ok(())
 }
 

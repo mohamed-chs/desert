@@ -21,6 +21,7 @@ Core quality checks currently pass:
 - `src/sourcemap.rs`: Line-based Rust-to-Desert mapping.
 - `src/mirage.rs`: Rust diagnostic translation to Desert terminology.
 - `src/main.rs`: CLI entry point (`transpile`, `check`) and diagnostics plumbing.
+- `src/main.rs`: CLI entry point (`transpile`, `check`, `graph`) and diagnostics plumbing.
 
 ## Implemented Language Surface
 
@@ -39,6 +40,7 @@ Core quality checks currently pass:
 - Project directories require `desert.toml` or `Desert.toml`.
 - Entrypoint resolution uses `[package].entry` when provided, defaulting to `src/main.ds`.
 - Project mode resolves top-level imports recursively (relative to importing file), defaults missing import extensions to `.ds`, and rejects import cycles.
+- `desert graph <project_dir>` prints the resolved import/topological load order used for compilation.
 
 ## Recent Cleanup
 
@@ -73,6 +75,6 @@ Core quality checks currently pass:
 ## Recommended Next Steps
 
 1. Add first-class file-aware source mapping for project imports (file + line + column diagnostics).
-2. Add basic tooling primitives first (formatter scaffold, project graph check command, incremental cache keying).
+2. Add basic tooling primitives first (formatter scaffold, cache-key groundwork for faster checks, CI command split).
 3. Expand Mirage hints with ownership/lifetime-oriented guidance as diagnostics layer work.
 4. Convert `pyimport` into executable interop scaffolding later.

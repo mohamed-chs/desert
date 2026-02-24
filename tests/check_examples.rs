@@ -222,3 +222,21 @@ fn check_project_directory_reports_import_cycle() {
         .failure()
         .stderr(predicates::str::contains("import cycle detected:"));
 }
+
+#[test]
+fn graph_project_directory_with_import_graph_order() {
+    let mut cmd = cargo_bin_cmd!("desert");
+    cmd.arg("graph").arg("tests/fixtures/project_import_graph");
+    cmd.assert().success().stdout(predicates::str::contains(
+        "src/util/ops.ds\nsrc/util/math.ds\nsrc/main.ds\n",
+    ));
+}
+
+#[test]
+fn graph_rejects_file_input() {
+    let mut cmd = cargo_bin_cmd!("desert");
+    cmd.arg("graph").arg("examples/hello_world.ds");
+    cmd.assert()
+        .failure()
+        .stderr(predicates::str::contains("must be a project directory"));
+}
