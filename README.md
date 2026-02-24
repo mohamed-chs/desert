@@ -32,6 +32,7 @@ cargo build --release
 - **New Project**: `desert new my_app`
 - **Format**: `desert fmt path/to/file_or_dir`
 - **Format Check**: `desert fmt path/to/file_or_dir --check`
+- **Doctor**: `desert doctor [path/to/file_or_project]`
 - **Graph**: `desert graph path/to/project` (prints resolved import order)
 
 Project source files can import other files using `import "relative/path.ds"` or dotted paths like `import util.math` (resolved relative to the importing file, `.ds` extension implied).

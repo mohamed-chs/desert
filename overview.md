@@ -43,6 +43,7 @@ The design priority is explicit semantics with predictable lowering. Syntax that
 - `desert run <project_dir> [-- args...]` with the same project entry resolution
 - `desert new <path> [--force]` to scaffold `desert.toml` and `src/main.ds`
 - `desert fmt <file_or_dir> [--check]` to apply/enforce canonical Desert formatting
+- `desert doctor [file_or_project]` to preflight rustc availability and source/project parse+semantic health
 - `desert graph <project_dir>` to print resolved import load order
 
 Project mode resolves top-level `import` statements recursively, loads imported files before importers, and rejects import cycles.

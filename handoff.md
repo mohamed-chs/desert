@@ -20,7 +20,7 @@ Core quality checks currently pass:
 - `src/resolver.rs`: Lightweight scoped type/value symbol tracker for unified-dot lowering.
 - `src/sourcemap.rs`: Rust-to-Desert mapping with source file + line locations.
 - `src/mirage.rs`: Rust diagnostic translation to Desert terminology.
-- `src/main.rs`: CLI entry point (`transpile`, `check`, `run`, `new`, `fmt`, `graph`) and diagnostics plumbing.
+- `src/main.rs`: CLI entry point (`transpile`, `check`, `run`, `new`, `fmt`, `doctor`, `graph`) and diagnostics plumbing.
 
 ## Implemented Language Surface
 
@@ -35,7 +35,7 @@ Core quality checks currently pass:
 
 ## Implemented Project Surface
 
-- CLI now accepts either a single `.ds` file or a project directory for `transpile`/`check`/`run`, plus project scaffolding with `new` and formatting with `fmt`.
+- CLI now accepts either a single `.ds` file or a project directory for `transpile`/`check`/`run`, plus project scaffolding with `new`, formatting with `fmt`, and preflight validation with `doctor`.
 - Project directories require `desert.toml` or `Desert.toml`.
 - Entrypoint resolution uses `[package].entry` when provided, defaulting to `src/main.ds`.
 - Project mode resolves top-level imports recursively (relative to importing file), defaults missing import extensions to `.ds`, and rejects import cycles.
@@ -43,6 +43,7 @@ Core quality checks currently pass:
 - `desert run <input>` now compiles and executes file/project programs directly, with optional passthrough args after `--`.
 - `desert new <path>` now scaffolds a runnable project (`desert.toml`, `src/main.ds`), with `--force` for non-empty dirs.
 - `desert fmt <file_or_dir> [--check]` now provides canonical source formatting and CI check mode.
+- `desert doctor [file_or_project]` now validates rustc availability and source/project parse+semantic health without running rustc checks.
 
 ## Recent Cleanup
 
@@ -50,6 +51,7 @@ Core quality checks currently pass:
 - `check` now uses unique temp directories, `rustc --emit=metadata`, and isolated rustc outputs in temp dirs.
 - Added a `run` command that compiles to temp executables, translates rustc compile diagnostics through Mirage, and then executes.
 - Added a `fmt` command with parser-backed canonical formatting and `--check` enforcement mode.
+- Added a `doctor` command for preflight environment + source/project validation.
 - Cleaned parser generic-call flow and pyimport token rendering.
 - Simplified transpiler internals and removed placeholder block output path.
 - Added `Default` implementations and resolved Clippy warnings.

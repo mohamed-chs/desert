@@ -423,3 +423,22 @@ fn fmt_check_fails_when_file_needs_formatting() {
 
     let _ = fs::remove_file(&file);
 }
+
+#[test]
+fn doctor_reports_environment_without_input() {
+    let mut cmd = cargo_bin_cmd!("desert");
+    cmd.arg("doctor");
+    cmd.assert()
+        .success()
+        .stdout(predicates::str::contains("rustc:"))
+        .stdout(predicates::str::contains("environment: ok"));
+}
+
+#[test]
+fn doctor_validates_project_input() {
+    let mut cmd = cargo_bin_cmd!("desert");
+    cmd.arg("doctor").arg("tests/fixtures/project_ok");
+    cmd.assert()
+        .success()
+        .stdout(predicates::str::contains("project: ok"));
+}

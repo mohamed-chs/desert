@@ -69,6 +69,11 @@ enum Commands {
         #[arg(long)]
         check: bool,
     },
+    /// Run environment and project preflight diagnostics
+    Doctor {
+        /// Optional .ds file or project directory to validate
+        input: Option<PathBuf>,
+    },
     /// Print resolved import graph order for a project
     Graph {
         /// Project directory containing desert.toml/Desert.toml
@@ -185,6 +190,9 @@ fn main() -> anyhow::Result<()> {
             } else {
                 println!("Formatted {} file(s).", changed_files.len());
             }
+        }
+        Commands::Doctor { input } => {
+            run_doctor(input.as_deref())?;
         }
     }
 
@@ -473,6 +481,47 @@ fn unique_temp_dir() -> PathBuf {
         .map(|d| d.as_nanos())
         .unwrap_or(0);
     std::env::temp_dir().join(format!("desert_check_{}_{}", std::process::id(), nanos))
+}
+
+fn run_doctor(input: Option<&Path>) -> anyhow::Result<()> {
+    let rustc_version = std::process::Command::new("rustc")
+        .arg("--version")
+        .output()
+        .map_err(|err| anyhow::anyhow!("failed to execute rustc: {}", err))?;
+    if !rustc_version.status.success() {
+        anyhow::bail!("rustc is installed but not runnable");
+    }
+    let version_text = String::from_utf8(rustc_version.stdout)?.trim().to_string();
+    println!("rustc: {version_text}");
+
+    if let Some(input) = input {
+        if input.is_file() {
+            let source = fs::read_to_string(input)?;
+            let program = parse_source(&source)?;
+            validate_program(&source, &program)?;
+            println!("source: ok ({})", input.display());
+            return Ok(());
+        }
+
+        if input.is_dir() {
+            let (project_root, ordered_files) = resolve_project_graph(input)?;
+            for file in ordered_files {
+                let source = fs::read_to_string(&file)?;
+                let program = parse_source(&source)?;
+                validate_program(&source, &program)?;
+            }
+            println!("project: ok ({})", project_root.display());
+            return Ok(());
+        }
+
+        anyhow::bail!(
+            "doctor input '{}' is neither a file nor a directory",
+            input.display()
+        );
+    }
+
+    println!("environment: ok");
+    Ok(())
 }
 
 fn collect_ds_files(input: &Path) -> anyhow::Result<Vec<PathBuf>> {

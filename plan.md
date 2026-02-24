@@ -18,6 +18,7 @@ This roadmap follows current project direction: prioritize project workflow and 
 - Add direct execution workflow (`desert run <file|project> [-- args...]`). (Done)
 - Add zero-config project scaffolding (`desert new <path>`). (Done)
 - Add formatter scaffold and stable style output. (Done)
+- Add preflight environment/project validation (`desert doctor`). (Done)
 - Keep transpilation predictable and readable while introducing cross-file compilation order.
 - Preserve current lowering conventions while scaling from single-file to project mode.
 
