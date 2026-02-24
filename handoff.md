@@ -60,6 +60,7 @@ Core quality checks currently pass:
 - Added pre-Rust semantic validation for mutability-sensitive forms so `move x` and `~x` fail fast with Desert line/column errors when `x` is not declared `mut`, and now also reject non-place operands such as `move foo()` or `~foo()`.
 - Extended mutability-sensitive prechecks so `move`/`~` on member/index places (`obj.field`, `items[i]`) accept unique-reference write-through roots, matching assignment write-through behavior.
 - Added pre-Rust assignment validation so `lhs = rhs` now fails early unless `lhs` is a place expression, the root binding exists, and write access is valid (`mut` root or unique-reference write-through for member/index assignment). Struct constructor named arguments (`Type(field=value)`) are handled explicitly as constructor syntax, not assignment.
+- Added pre-Rust struct-constructor argument validation so `Type(...)` now fails fast on unknown/duplicate named fields, positional overflow, and missing required fields instead of deferring to rustc.
 - Removed statement-level borrow declarations (`ref`, `mut ref`) from AST/parser/transpiler. Borrow binding is now expression-only (`let a = &x`, `let b = ~x`), and `ref` is no longer a reserved keyword.
 - Added `import` parsing and project graph loading so multi-file projects compile from a single entrypoint.
 

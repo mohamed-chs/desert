@@ -165,6 +165,46 @@ fn check_reports_assignment_requires_place_expression() {
 }
 
 #[test]
+fn check_reports_constructor_unknown_field() {
+    let mut cmd = cargo_bin_cmd!("desert");
+    cmd.arg("check")
+        .arg("tests/fixtures/check_fail_constructor_unknown_field.ds");
+    cmd.assert().failure().stderr(predicates::str::contains(
+        "Semantic error at line 6, column 5: constructor `Pair` has no field `c`",
+    ));
+}
+
+#[test]
+fn check_reports_constructor_duplicate_field() {
+    let mut cmd = cargo_bin_cmd!("desert");
+    cmd.arg("check")
+        .arg("tests/fixtures/check_fail_constructor_duplicate_field.ds");
+    cmd.assert().failure().stderr(predicates::str::contains(
+        "Semantic error at line 6, column 5: constructor `Pair` received duplicate field `a`",
+    ));
+}
+
+#[test]
+fn check_reports_constructor_too_many_positional_arguments() {
+    let mut cmd = cargo_bin_cmd!("desert");
+    cmd.arg("check")
+        .arg("tests/fixtures/check_fail_constructor_too_many_positional.ds");
+    cmd.assert().failure().stderr(predicates::str::contains(
+        "Semantic error at line 6, column 5: constructor `Pair` received too many positional arguments",
+    ));
+}
+
+#[test]
+fn check_reports_constructor_missing_fields() {
+    let mut cmd = cargo_bin_cmd!("desert");
+    cmd.arg("check")
+        .arg("tests/fixtures/check_fail_constructor_missing_fields.ds");
+    cmd.assert().failure().stderr(predicates::str::contains(
+        "Semantic error at line 6, column 5: constructor `Pair` is missing fields: b",
+    ));
+}
+
+#[test]
 fn check_reports_method_resolution_failure_with_desert_line_mapping() {
     let mut cmd = cargo_bin_cmd!("desert");
     cmd.arg("check")

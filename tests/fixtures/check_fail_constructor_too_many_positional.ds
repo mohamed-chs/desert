@@ -1,0 +1,7 @@
+struct Pair:
+    a: i32
+    b: i32
+
+def main():
+    let p = Pair(1, 2, 3)
+    $print(p)
