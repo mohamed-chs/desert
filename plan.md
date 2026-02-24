@@ -7,7 +7,7 @@ This roadmap focuses on shipping a stable core before expanding syntax.
 - Tighten parser/transpiler error messages (line/column + useful context).
 - Add golden tests for transpilation output.
 - Add integration tests for `desert check` on example programs. (Done for current `examples/*.ds`)
-- Add integration tests for `desert check` failure paths and translated diagnostics. (Initial fixture added)
+- Add integration tests for `desert check` failure paths and translated diagnostics. (Type mismatch + parser + lexer fixtures added)
 - Keep `cargo test` and `cargo clippy` clean.
 
 ## Phase 2: Semantic Resolution

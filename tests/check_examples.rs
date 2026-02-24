@@ -69,3 +69,25 @@ fn check_reports_translated_diagnostics_for_type_mismatch_fixture() {
             "Rust check failed with translated diagnostics.",
         ));
 }
+
+#[test]
+fn check_reports_parser_errors_with_location() {
+    let mut cmd = cargo_bin_cmd!("desert");
+    cmd.arg("check")
+        .arg("tests/fixtures/check_fail_parse_missing_colon.ds");
+    cmd.assert()
+        .failure()
+        .stderr(predicates::str::contains("Parsing error at line 1, column 1"))
+        .stderr(predicates::str::contains("near token Def"));
+}
+
+#[test]
+fn check_reports_lexer_errors_with_location() {
+    let mut cmd = cargo_bin_cmd!("desert");
+    cmd.arg("check")
+        .arg("tests/fixtures/check_fail_lex_unknown_token.ds");
+    cmd.assert()
+        .failure()
+        .stderr(predicates::str::contains("Lexing error at line 2, column 15"))
+        .stderr(predicates::str::contains("near '^'"));
+}
