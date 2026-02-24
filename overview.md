@@ -13,6 +13,7 @@ The design priority is explicit semantics with predictable lowering. Syntax that
   - `move place` lowers to `std::mem::take(&mut place)`
   - `&expr` shared borrow
   - `~expr` mutable borrow
+  - `move`/`~` pre-checks treat `x` as requiring a `mut` binding, while `obj.field`/`items[i]` allow unique-reference write-through roots
   - Borrow bindings are expression-only (`let r = &x`, `let r = ~x`); statement-level `ref`/`mut ref` syntax was removed
   - Assignment pre-checks require place-form left-hand sides (`x`, `obj.field`, `items[i]`) and enforce mutable/write-through roots before Rust emission
 - Operators:

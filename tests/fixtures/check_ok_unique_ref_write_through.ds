@@ -1,0 +1,7 @@
+def main():
+    mut xs = [1, 2, 3]
+    let r = ~xs
+    let alias = ~r[0]
+    $print(alias)
+    let taken = move r[1]
+    $print(taken)

@@ -137,6 +137,14 @@ fn check_reports_unique_ref_non_place_failure_with_desert_location() {
 }
 
 #[test]
+fn check_allows_unique_ref_write_through_for_move_and_borrow() {
+    let mut cmd = cargo_bin_cmd!("desert");
+    cmd.arg("check")
+        .arg("tests/fixtures/check_ok_unique_ref_write_through.ds");
+    cmd.assert().success();
+}
+
+#[test]
 fn check_reports_assignment_requires_mutable_binding() {
     let mut cmd = cargo_bin_cmd!("desert");
     cmd.arg("check")

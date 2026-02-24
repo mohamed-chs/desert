@@ -593,17 +593,25 @@ fn validate_mutable_binding(
             });
         };
 
-        if !binding.is_mut {
-            return Err(SemanticError {
-                offset,
-                message: format!(
-                    "`{}` requires mutable binding `{}` (declare with `mut` first)",
-                    op_name, root
-                ),
-            });
+        let can_mutate_place = match expr {
+            crate::ast::Expression::Ident(_) => binding.is_mut,
+            _ => binding.can_write_through,
+        };
+        if can_mutate_place {
+            return Ok(());
         }
 
-        Ok(())
+        let message = match expr {
+            crate::ast::Expression::Ident(_) => format!(
+                "`{}` requires mutable binding `{}` (declare with `mut` first)",
+                op_name, root
+            ),
+            _ => format!(
+                "`{}` through `{}` requires mutable root binding or a unique reference (`~`)",
+                op_name, root
+            ),
+        };
+        Err(SemanticError { offset, message })
     } else {
         Err(SemanticError {
             offset,
