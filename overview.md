@@ -13,6 +13,7 @@ The design priority is explicit semantics with predictable lowering. Syntax that
   - `&expr` shared borrow
   - `~expr` mutable borrow
   - Borrow bindings are expression-only (`let r = &x`, `let r = ~x`); statement-level `ref`/`mut ref` syntax was removed
+  - Assignment pre-checks require place-form left-hand sides (`x`, `obj.field`, `items[i]`) and enforce mutable/write-through roots before Rust emission
 - Operators:
   - arithmetic: `+`, `-`, `*`, `/`
   - comparisons: `==`, `!=`, `<`, `<=`, `>`, `>=`

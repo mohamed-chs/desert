@@ -15,6 +15,7 @@ use clap::Parser;
 use nom::Err as NomErr;
 use nom::error::Error as NomError;
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::fs;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -174,9 +175,16 @@ struct SemanticError {
     message: String,
 }
 
+#[derive(Debug, Clone, Copy)]
+struct BindingInfo {
+    is_mut: bool,
+    can_write_through: bool,
+}
+
 fn validate_program(input_content: &str, program: &crate::ast::Program) -> anyhow::Result<()> {
+    let struct_names = collect_struct_names(program);
     let mut scopes = vec![HashMap::new()];
-    validate_statements(&program.statements, &mut scopes).map_err(|err| {
+    validate_statements(&program.statements, &mut scopes, &struct_names).map_err(|err| {
         let (line, col) = line_col_from_offset(input_content, err.offset);
         anyhow::anyhow!(
             "Semantic error at line {}, column {}: {}",
@@ -189,25 +197,50 @@ fn validate_program(input_content: &str, program: &crate::ast::Program) -> anyho
 
 fn validate_statements(
     statements: &[crate::ast::Statement],
-    scopes: &mut Vec<HashMap<String, bool>>,
+    scopes: &mut Vec<HashMap<String, BindingInfo>>,
+    struct_names: &HashSet<String>,
 ) -> Result<(), SemanticError> {
+    predeclare_block_symbols(statements, scopes);
+
     for stmt in statements {
         use crate::ast::StatementKind;
         match &stmt.kind {
             StatementKind::Let { name, value, .. } => {
-                validate_expression(value, stmt.span.start, scopes)?;
-                declare_mutability(scopes, name, false);
+                validate_expression(value, stmt.span.start, scopes, struct_names)?;
+                declare_binding(
+                    scopes,
+                    name,
+                    BindingInfo {
+                        is_mut: false,
+                        can_write_through: expression_is_unique_ref(value),
+                    },
+                );
             }
             StatementKind::Mut { name, value, .. } => {
-                validate_expression(value, stmt.span.start, scopes)?;
-                declare_mutability(scopes, name, true);
+                validate_expression(value, stmt.span.start, scopes, struct_names)?;
+                declare_binding(
+                    scopes,
+                    name,
+                    BindingInfo {
+                        is_mut: true,
+                        can_write_through: true,
+                    },
+                );
             }
             StatementKind::Def { params, body, .. } => {
                 scopes.push(HashMap::new());
                 for param in params {
-                    declare_mutability(scopes, &param.name, param.is_mut);
+                    declare_binding(
+                        scopes,
+                        &param.name,
+                        BindingInfo {
+                            is_mut: param.is_mut,
+                            can_write_through: param.is_mut
+                                || param.ty.as_ref().is_some_and(type_is_unique_ref),
+                        },
+                    );
                 }
-                validate_statements(body, scopes)?;
+                validate_statements(body, scopes, struct_names)?;
                 scopes.pop();
             }
             StatementKind::If {
@@ -215,13 +248,13 @@ fn validate_statements(
                 then_block,
                 else_block,
             } => {
-                validate_expression(condition, stmt.span.start, scopes)?;
+                validate_expression(condition, stmt.span.start, scopes, struct_names)?;
                 scopes.push(HashMap::new());
-                validate_statements(then_block, scopes)?;
+                validate_statements(then_block, scopes, struct_names)?;
                 scopes.pop();
                 if let Some(block) = else_block {
                     scopes.push(HashMap::new());
-                    validate_statements(block, scopes)?;
+                    validate_statements(block, scopes, struct_names)?;
                     scopes.pop();
                 }
             }
@@ -230,28 +263,37 @@ fn validate_statements(
                 iterable,
                 body,
             } => {
-                validate_expression(iterable, stmt.span.start, scopes)?;
+                validate_expression(iterable, stmt.span.start, scopes, struct_names)?;
                 scopes.push(HashMap::new());
-                declare_mutability(scopes, var, false);
-                validate_statements(body, scopes)?;
+                declare_binding(
+                    scopes,
+                    var,
+                    BindingInfo {
+                        is_mut: false,
+                        can_write_through: false,
+                    },
+                );
+                validate_statements(body, scopes, struct_names)?;
                 scopes.pop();
             }
             StatementKind::Match { expression, arms } => {
-                validate_expression(expression, stmt.span.start, scopes)?;
+                validate_expression(expression, stmt.span.start, scopes, struct_names)?;
                 for (pattern, body) in arms {
-                    validate_expression(pattern, stmt.span.start, scopes)?;
+                    validate_expression(pattern, stmt.span.start, scopes, struct_names)?;
                     scopes.push(HashMap::new());
-                    validate_statements(body, scopes)?;
+                    validate_statements(body, scopes, struct_names)?;
                     scopes.pop();
                 }
             }
             StatementKind::Return(Some(expr)) | StatementKind::Expr(expr) => {
-                validate_expression(expr, stmt.span.start, scopes)?;
+                validate_expression(expr, stmt.span.start, scopes, struct_names)?;
             }
             StatementKind::Impl { methods, .. } | StatementKind::Protocol { methods, .. } => {
-                validate_statements(methods, scopes)?;
+                validate_statements(methods, scopes, struct_names)?;
             }
-            StatementKind::Struct { .. } | StatementKind::PyImport(_) | StatementKind::Return(None) => {}
+            StatementKind::Struct { .. }
+            | StatementKind::PyImport(_)
+            | StatementKind::Return(None) => {}
         }
     }
     Ok(())
@@ -260,42 +302,59 @@ fn validate_statements(
 fn validate_expression(
     expr: &crate::ast::Expression,
     offset: usize,
-    scopes: &[HashMap<String, bool>],
+    scopes: &[HashMap<String, BindingInfo>],
+    struct_names: &HashSet<String>,
 ) -> Result<(), SemanticError> {
     use crate::ast::Expression;
     match expr {
-        Expression::BinaryOp(left, _, right) => {
-            validate_expression(left, offset, scopes)?;
-            validate_expression(right, offset, scopes)
+        Expression::BinaryOp(left, crate::ast::BinaryOp::Assign, right) => {
+            validate_assignment_target(left, offset, scopes, struct_names)?;
+            validate_expression(right, offset, scopes, struct_names)
         }
-        Expression::Call(callee, args) | Expression::GenericCall(callee, _, args) => {
-            validate_expression(callee, offset, scopes)?;
+        Expression::BinaryOp(left, _, right) => {
+            validate_expression(left, offset, scopes, struct_names)?;
+            validate_expression(right, offset, scopes, struct_names)
+        }
+        Expression::Call(callee, args) => {
+            validate_expression(callee, offset, scopes, struct_names)?;
+            let constructor_call = is_struct_constructor_callee(callee, struct_names);
             for arg in args {
-                validate_expression(arg, offset, scopes)?;
+                if constructor_call {
+                    validate_constructor_arg(arg, offset, scopes, struct_names)?;
+                } else {
+                    validate_expression(arg, offset, scopes, struct_names)?;
+                }
+            }
+            Ok(())
+        }
+        Expression::GenericCall(callee, _, args) => {
+            validate_expression(callee, offset, scopes, struct_names)?;
+            for arg in args {
+                validate_expression(arg, offset, scopes, struct_names)?;
             }
             Ok(())
         }
         Expression::MacroCall(_, args) | Expression::Literal(crate::ast::Literal::List(args)) => {
             for arg in args {
-                validate_expression(arg, offset, scopes)?;
+                validate_expression(arg, offset, scopes, struct_names)?;
             }
             Ok(())
         }
         Expression::Move(inner) => {
             validate_mutable_binding(inner, scopes, "move", offset)?;
-            validate_expression(inner, offset, scopes)
+            validate_expression(inner, offset, scopes, struct_names)
         }
         Expression::UniqueRef(inner) => {
             validate_mutable_binding(inner, scopes, "~", offset)?;
-            validate_expression(inner, offset, scopes)
+            validate_expression(inner, offset, scopes, struct_names)
         }
         Expression::MemberAccess(inner, _)
         | Expression::SharedRef(inner)
         | Expression::Question(inner)
-        | Expression::Unwrap(inner) => validate_expression(inner, offset, scopes),
+        | Expression::Unwrap(inner) => validate_expression(inner, offset, scopes, struct_names),
         Expression::Index(inner, index) => {
-            validate_expression(inner, offset, scopes)?;
-            validate_expression(index, offset, scopes)
+            validate_expression(inner, offset, scopes, struct_names)?;
+            validate_expression(index, offset, scopes, struct_names)
         }
         Expression::Literal(_) | Expression::Ident(_) => Ok(()),
     }
@@ -303,7 +362,7 @@ fn validate_expression(
 
 fn validate_mutable_binding(
     expr: &crate::ast::Expression,
-    scopes: &[HashMap<String, bool>],
+    scopes: &[HashMap<String, BindingInfo>],
     op_name: &str,
     offset: usize,
 ) -> Result<(), SemanticError> {
@@ -318,17 +377,24 @@ fn validate_mutable_binding(
     }
 
     if let Some(root) = place_root_ident(expr) {
-        if is_mutable(root, scopes) {
-            Ok(())
-        } else {
-            Err(SemanticError {
+        let Some(binding) = lookup_binding(root, scopes) else {
+            return Err(SemanticError {
+                offset,
+                message: format!("`{}` requires declared binding `{}`", op_name, root),
+            });
+        };
+
+        if !binding.is_mut {
+            return Err(SemanticError {
                 offset,
                 message: format!(
                     "`{}` requires mutable binding `{}` (declare with `mut` first)",
                     op_name, root
                 ),
-            })
+            });
         }
+
+        Ok(())
     } else {
         Err(SemanticError {
             offset,
@@ -355,16 +421,153 @@ fn place_root_ident(expr: &crate::ast::Expression) -> Option<&str> {
     }
 }
 
-fn declare_mutability(scopes: &mut [HashMap<String, bool>], name: &str, is_mut: bool) {
-    if let Some(scope) = scopes.last_mut() {
-        scope.insert(name.to_string(), is_mut);
+fn validate_assignment_target(
+    expr: &crate::ast::Expression,
+    offset: usize,
+    scopes: &[HashMap<String, BindingInfo>],
+    struct_names: &HashSet<String>,
+) -> Result<(), SemanticError> {
+    if !is_place_expression(expr) {
+        return Err(SemanticError {
+            offset,
+            message:
+                "assignment expects a place expression on the left side (`x`, `obj.field`, or `items[i]`)"
+                    .to_string(),
+        });
+    }
+
+    validate_place_subexpressions(expr, offset, scopes, struct_names)?;
+
+    let Some(root) = place_root_ident(expr) else {
+        return Err(SemanticError {
+            offset,
+            message: "assignment requires a declared local binding on the left side".to_string(),
+        });
+    };
+
+    let Some(binding) = lookup_binding(root, scopes) else {
+        return Err(SemanticError {
+            offset,
+            message: format!("assignment requires declared binding `{}`", root),
+        });
+    };
+
+    let can_assign = match expr {
+        crate::ast::Expression::Ident(_) => binding.is_mut,
+        _ => binding.can_write_through,
+    };
+    if can_assign {
+        return Ok(());
+    }
+
+    let message = match expr {
+        crate::ast::Expression::Ident(_) => format!(
+            "assignment requires mutable binding `{}` (declare with `mut` first)",
+            root
+        ),
+        _ => format!(
+            "assignment through `{}` requires mutable root binding or a unique reference (`~`)",
+            root
+        ),
+    };
+    Err(SemanticError { offset, message })
+}
+
+fn validate_place_subexpressions(
+    expr: &crate::ast::Expression,
+    offset: usize,
+    scopes: &[HashMap<String, BindingInfo>],
+    struct_names: &HashSet<String>,
+) -> Result<(), SemanticError> {
+    match expr {
+        crate::ast::Expression::MemberAccess(inner, _) => {
+            validate_place_subexpressions(inner, offset, scopes, struct_names)
+        }
+        crate::ast::Expression::Index(inner, index) => {
+            validate_place_subexpressions(inner, offset, scopes, struct_names)?;
+            validate_expression(index, offset, scopes, struct_names)
+        }
+        crate::ast::Expression::Ident(_) => Ok(()),
+        _ => Err(SemanticError {
+            offset,
+            message:
+                "assignment expects a place expression on the left side (`x`, `obj.field`, or `items[i]`)"
+                    .to_string(),
+        }),
     }
 }
 
-fn is_mutable(name: &str, scopes: &[HashMap<String, bool>]) -> bool {
-    scopes
-        .iter()
-        .rev()
-        .find_map(|scope| scope.get(name).copied())
-        .unwrap_or(false)
+fn predeclare_block_symbols(
+    statements: &[crate::ast::Statement],
+    scopes: &mut [HashMap<String, BindingInfo>],
+) {
+    for stmt in statements {
+        if let crate::ast::StatementKind::Def { name, .. } = &stmt.kind {
+            declare_binding(
+                scopes,
+                name,
+                BindingInfo {
+                    is_mut: false,
+                    can_write_through: false,
+                },
+            );
+        }
+    }
+}
+
+fn validate_constructor_arg(
+    arg: &crate::ast::Expression,
+    offset: usize,
+    scopes: &[HashMap<String, BindingInfo>],
+    struct_names: &HashSet<String>,
+) -> Result<(), SemanticError> {
+    if let crate::ast::Expression::BinaryOp(left, crate::ast::BinaryOp::Assign, value) = arg {
+        if !matches!(left.as_ref(), crate::ast::Expression::Ident(_)) {
+            return Err(SemanticError {
+                offset,
+                message: "named constructor arguments must be in `field = value` form".to_string(),
+            });
+        }
+        return validate_expression(value, offset, scopes, struct_names);
+    }
+
+    validate_expression(arg, offset, scopes, struct_names)
+}
+
+fn is_struct_constructor_callee(
+    callee: &crate::ast::Expression,
+    struct_names: &HashSet<String>,
+) -> bool {
+    matches!(callee, crate::ast::Expression::Ident(name) if struct_names.contains(name))
+}
+
+fn declare_binding(scopes: &mut [HashMap<String, BindingInfo>], name: &str, binding: BindingInfo) {
+    if let Some(scope) = scopes.last_mut() {
+        scope.insert(name.to_string(), binding);
+    }
+}
+
+fn lookup_binding<'a>(
+    name: &str,
+    scopes: &'a [HashMap<String, BindingInfo>],
+) -> Option<&'a BindingInfo> {
+    scopes.iter().rev().find_map(|scope| scope.get(name))
+}
+
+fn expression_is_unique_ref(expr: &crate::ast::Expression) -> bool {
+    matches!(expr, crate::ast::Expression::UniqueRef(_))
+}
+
+fn type_is_unique_ref(ty: &crate::ast::Type) -> bool {
+    matches!(ty, crate::ast::Type::UniqueRef(_))
+}
+
+fn collect_struct_names(program: &crate::ast::Program) -> HashSet<String> {
+    let mut names = HashSet::new();
+    for stmt in &program.statements {
+        if let crate::ast::StatementKind::Struct { name, .. } = &stmt.kind {
+            names.insert(name.clone());
+        }
+    }
+    names
 }

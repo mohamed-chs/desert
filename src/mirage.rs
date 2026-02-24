@@ -67,7 +67,9 @@ impl Mirage {
             Some("E0599") => Some(
                 "Call a method that exists for this type, or implement a matching `protocol`/`impl`.",
             ),
-            Some("E0308") => Some("Match the declared type annotation with the assigned expression."),
+            Some("E0308") => {
+                Some("Match the declared type annotation with the assigned expression.")
+            }
             _ => None,
         }
     }
@@ -99,7 +101,9 @@ mod tests {
         };
 
         let translated = Mirage::translate_error(&msg, &source_map);
-        assert!(translated.contains("Hint: Declare the binding with `mut` before using `~` or `move`."));
+        assert!(
+            translated.contains("Hint: Declare the binding with `mut` before using `~` or `move`.")
+        );
         assert!(translated.contains("Line 9: in Desert source"));
     }
 

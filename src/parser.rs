@@ -957,7 +957,9 @@ mod tests {
         let (_, program) = parse_program(&tokens).unwrap();
         match &program.statements[0].kind {
             StatementKind::Let { value, .. } => {
-                assert!(matches!(value, Expression::Literal(Literal::Float(v)) if (*v - (-0.2)).abs() < f64::EPSILON));
+                assert!(
+                    matches!(value, Expression::Literal(Literal::Float(v)) if (*v - (-0.2)).abs() < f64::EPSILON)
+                );
             }
             _ => panic!("Expected Let statement"),
         }

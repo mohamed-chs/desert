@@ -11,7 +11,7 @@ This roadmap assumes deliberate breaking changes when they reduce syntax overlap
 ## Phase 2: Resolution and Type Semantics
 
 - Extend resolver from receiver classification into symbol/type validation.
-- Add explicit semantic checks for callable/member/index targets before Rust emit.
+- Add explicit semantic checks for callable/member/index targets before Rust emit. (Partially done: assignment target semantics now checked pre-Rust, including constructor named-arg disambiguation.)
 - Keep precedence and lowering conventions explicit and test-backed.
 
 ## Phase 3: Diagnostics and Mirage

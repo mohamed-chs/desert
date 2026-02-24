@@ -77,7 +77,9 @@ fn check_reports_parser_errors_with_location() {
         .arg("tests/fixtures/check_fail_parse_missing_colon.ds");
     cmd.assert()
         .failure()
-        .stderr(predicates::str::contains("Parsing error at line 1, column 1"))
+        .stderr(predicates::str::contains(
+            "Parsing error at line 1, column 1",
+        ))
         .stderr(predicates::str::contains("near token Def"));
 }
 
@@ -88,7 +90,9 @@ fn check_reports_lexer_errors_with_location() {
         .arg("tests/fixtures/check_fail_lex_unknown_token.ds");
     cmd.assert()
         .failure()
-        .stderr(predicates::str::contains("Lexing error at line 2, column 15"))
+        .stderr(predicates::str::contains(
+            "Lexing error at line 2, column 15",
+        ))
         .stderr(predicates::str::contains("near '^'"));
 }
 
@@ -97,11 +101,9 @@ fn check_reports_move_mutability_failure_with_desert_line_mapping() {
     let mut cmd = cargo_bin_cmd!("desert");
     cmd.arg("check")
         .arg("tests/fixtures/check_fail_move_requires_mut.ds");
-    cmd.assert()
-        .failure()
-        .stderr(predicates::str::contains(
-            "Semantic error at line 3, column 5: `move` requires mutable binding `xs`",
-        ));
+    cmd.assert().failure().stderr(predicates::str::contains(
+        "Semantic error at line 3, column 5: `move` requires mutable binding `xs`",
+    ));
 }
 
 #[test]
@@ -109,11 +111,9 @@ fn check_reports_unique_ref_mutability_failure_with_desert_location() {
     let mut cmd = cargo_bin_cmd!("desert");
     cmd.arg("check")
         .arg("tests/fixtures/check_fail_unique_ref_requires_mut.ds");
-    cmd.assert()
-        .failure()
-        .stderr(predicates::str::contains(
-            "Semantic error at line 2, column 1: `~` requires mutable binding `x`",
-        ));
+    cmd.assert().failure().stderr(predicates::str::contains(
+        "Semantic error at line 2, column 1: `~` requires mutable binding `x`",
+    ));
 }
 
 #[test]
@@ -121,11 +121,9 @@ fn check_reports_move_non_place_failure_with_desert_location() {
     let mut cmd = cargo_bin_cmd!("desert");
     cmd.arg("check")
         .arg("tests/fixtures/check_fail_move_non_place.ds");
-    cmd.assert()
-        .failure()
-        .stderr(predicates::str::contains(
-            "Semantic error at line 2, column 5: `move` expects a mutable place expression",
-        ));
+    cmd.assert().failure().stderr(predicates::str::contains(
+        "Semantic error at line 2, column 5: `move` expects a mutable place expression",
+    ));
 }
 
 #[test]
@@ -133,11 +131,29 @@ fn check_reports_unique_ref_non_place_failure_with_desert_location() {
     let mut cmd = cargo_bin_cmd!("desert");
     cmd.arg("check")
         .arg("tests/fixtures/check_fail_unique_ref_non_place.ds");
-    cmd.assert()
-        .failure()
-        .stderr(predicates::str::contains(
-            "Semantic error at line 2, column 5: `~` expects a mutable place expression",
-        ));
+    cmd.assert().failure().stderr(predicates::str::contains(
+        "Semantic error at line 2, column 5: `~` expects a mutable place expression",
+    ));
+}
+
+#[test]
+fn check_reports_assignment_requires_mutable_binding() {
+    let mut cmd = cargo_bin_cmd!("desert");
+    cmd.arg("check")
+        .arg("tests/fixtures/check_fail_assign_requires_mut.ds");
+    cmd.assert().failure().stderr(predicates::str::contains(
+        "Semantic error at line 3, column 5: assignment requires mutable binding `x`",
+    ));
+}
+
+#[test]
+fn check_reports_assignment_requires_place_expression() {
+    let mut cmd = cargo_bin_cmd!("desert");
+    cmd.arg("check")
+        .arg("tests/fixtures/check_fail_assign_non_place.ds");
+    cmd.assert().failure().stderr(predicates::str::contains(
+        "Semantic error at line 3, column 5: assignment expects a place expression",
+    ));
 }
 
 #[test]

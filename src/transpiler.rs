@@ -362,7 +362,8 @@ impl Transpiler {
                     *current_line += 1;
                 }
                 _ => {
-                    let stmt_output = self.transpile_statement(stmt, indent, struct_fields, resolver);
+                    let stmt_output =
+                        self.transpile_statement(stmt, indent, struct_fields, resolver);
                     for _ in stmt_output.lines() {
                         source_map.add_mapping(*current_line, ds_line);
                         *current_line += 1;
@@ -478,11 +479,10 @@ impl Transpiler {
             }
             Expression::Literal(Literal::String(s)) => format!("\"{}\".to_string()", s),
             Expression::Literal(Literal::List(items)) => {
-                let items_str: Vec<String> =
-                    items
-                        .iter()
-                        .map(|i| self.transpile_expression(i, struct_fields, resolver))
-                        .collect();
+                let items_str: Vec<String> = items
+                    .iter()
+                    .map(|i| self.transpile_expression(i, struct_fields, resolver))
+                    .collect();
                 format!("vec![{}]", items_str.join(", "))
             }
             Expression::Ident(name) => name.clone(),
@@ -518,20 +518,16 @@ impl Transpiler {
             }
             Expression::Call(callee, args) => {
                 if let Expression::Ident(name) = callee.as_ref()
-                    && let Some(constructor) = self.transpile_struct_constructor_call(
-                        name,
-                        args,
-                        struct_fields,
-                        resolver,
-                    )
+                    && let Some(constructor) =
+                        self.transpile_struct_constructor_call(name, args, struct_fields, resolver)
                 {
                     return constructor;
                 }
 
-                let args_str: Vec<String> =
-                    args.iter()
-                        .map(|a| self.transpile_expression(a, struct_fields, resolver))
-                        .collect();
+                let args_str: Vec<String> = args
+                    .iter()
+                    .map(|a| self.transpile_expression(a, struct_fields, resolver))
+                    .collect();
                 format!(
                     "{}({})",
                     self.transpile_expression(callee, struct_fields, resolver),
@@ -540,10 +536,10 @@ impl Transpiler {
             }
             Expression::GenericCall(callee, types, args) => {
                 let types_str: Vec<String> = types.iter().map(|t| self.transpile_type(t)).collect();
-                let args_str: Vec<String> =
-                    args.iter()
-                        .map(|a| self.transpile_expression(a, struct_fields, resolver))
-                        .collect();
+                let args_str: Vec<String> = args
+                    .iter()
+                    .map(|a| self.transpile_expression(a, struct_fields, resolver))
+                    .collect();
                 format!(
                     "{}::<{}>({})",
                     self.transpile_expression(callee, struct_fields, resolver),
@@ -557,10 +553,10 @@ impl Transpiler {
                 }
 
                 let rust_macro = format!("{}!", name);
-                let args_str: Vec<String> =
-                    args.iter()
-                        .map(|a| self.transpile_expression(a, struct_fields, resolver))
-                        .collect();
+                let args_str: Vec<String> = args
+                    .iter()
+                    .map(|a| self.transpile_expression(a, struct_fields, resolver))
+                    .collect();
                 format!("{}({})", rust_macro, args_str.join(", "))
             }
             Expression::MemberAccess(expr, member) => {
@@ -578,16 +574,28 @@ impl Transpiler {
                 )
             }
             Expression::SharedRef(expr) => {
-                format!("&{}", self.transpile_expression(expr, struct_fields, resolver))
+                format!(
+                    "&{}",
+                    self.transpile_expression(expr, struct_fields, resolver)
+                )
             }
             Expression::UniqueRef(expr) => {
-                format!("&mut {}", self.transpile_expression(expr, struct_fields, resolver))
+                format!(
+                    "&mut {}",
+                    self.transpile_expression(expr, struct_fields, resolver)
+                )
             }
             Expression::Question(expr) => {
-                format!("{}?", self.transpile_expression(expr, struct_fields, resolver))
+                format!(
+                    "{}?",
+                    self.transpile_expression(expr, struct_fields, resolver)
+                )
             }
             Expression::Unwrap(expr) => {
-                format!("{}.unwrap()", self.transpile_expression(expr, struct_fields, resolver))
+                format!(
+                    "{}.unwrap()",
+                    self.transpile_expression(expr, struct_fields, resolver)
+                )
             }
             Expression::Index(expr, index) => {
                 format!(
@@ -695,8 +703,9 @@ impl Transpiler {
 
     fn declare_statement_symbols(&self, stmt: &Statement, resolver: &mut Resolver) {
         match &stmt.kind {
-            StatementKind::Let { name, .. }
-            | StatementKind::Mut { name, .. } => resolver.declare_value(name),
+            StatementKind::Let { name, .. } | StatementKind::Mut { name, .. } => {
+                resolver.declare_value(name)
+            }
             StatementKind::Def { name, .. } => resolver.declare_value(name),
             StatementKind::Struct { name, .. } | StatementKind::Protocol { name, .. } => {
                 resolver.declare_type(name)
@@ -804,7 +813,9 @@ impl Transpiler {
             StatementKind::For { body, .. }
             | StatementKind::Def { body, .. }
             | StatementKind::Protocol { methods: body, .. }
-            | StatementKind::Impl { methods: body, .. } => self.statement_block_has_value_return(body),
+            | StatementKind::Impl { methods: body, .. } => {
+                self.statement_block_has_value_return(body)
+            }
             StatementKind::Match { arms, .. } => arms
                 .iter()
                 .any(|(_, body)| self.statement_block_has_value_return(body)),
@@ -845,12 +856,10 @@ impl Transpiler {
             }
             StatementKind::Match { expression, arms } => {
                 self.expression_uses_matmul(expression)
-                    || arms
-                        .iter()
-                        .any(|(pat, body)| {
-                            self.expression_uses_matmul(pat)
-                                || body.iter().any(|s| self.statement_uses_matmul(s))
-                        })
+                    || arms.iter().any(|(pat, body)| {
+                        self.expression_uses_matmul(pat)
+                            || body.iter().any(|s| self.statement_uses_matmul(s))
+                    })
             }
             StatementKind::Return(Some(expr)) | StatementKind::Expr(expr) => {
                 self.expression_uses_matmul(expr)
@@ -872,7 +881,9 @@ impl Transpiler {
                 self.expression_uses_matmul(callee)
                     || args.iter().any(|arg| self.expression_uses_matmul(arg))
             }
-            Expression::MacroCall(_, args) => args.iter().any(|arg| self.expression_uses_matmul(arg)),
+            Expression::MacroCall(_, args) => {
+                args.iter().any(|arg| self.expression_uses_matmul(arg))
+            }
             Expression::MemberAccess(expr, _)
             | Expression::Move(expr)
             | Expression::SharedRef(expr)
@@ -1199,8 +1210,7 @@ mod tests {
         let (_, program) = parse_program(&tokens).unwrap();
         let transpiler = Transpiler::new();
         let (rust_code, _) = transpiler.transpile(&program, input);
-        let expected =
-            "impl Speak for Dog {\n    fn talk(&self) -> String {\n        return \"Woof\".to_string();\n    }\n}\n";
+        let expected = "impl Speak for Dog {\n    fn talk(&self) -> String {\n        return \"Woof\".to_string();\n    }\n}\n";
         assert_eq!(rust_code, expected);
     }
 
