@@ -1,6 +1,12 @@
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SourceLocation {
+    pub file: String,
+    pub line: usize,
+}
+
 pub struct SourceMap {
-    // rs_line -> ds_line
-    mappings: Vec<usize>,
+    // rs_line -> Desert source location
+    mappings: Vec<Option<SourceLocation>>,
 }
 
 impl SourceMap {
@@ -10,15 +16,15 @@ impl SourceMap {
         }
     }
 
-    pub fn add_mapping(&mut self, rs_line: usize, ds_line: usize) {
+    pub fn add_mapping(&mut self, rs_line: usize, location: SourceLocation) {
         if rs_line >= self.mappings.len() {
-            self.mappings.resize(rs_line + 1, 0);
+            self.mappings.resize(rs_line + 1, None);
         }
-        self.mappings[rs_line] = ds_line;
+        self.mappings[rs_line] = Some(location);
     }
 
-    pub fn get_ds_line(&self, rs_line: usize) -> Option<usize> {
-        self.mappings.get(rs_line).copied()
+    pub fn get_location(&self, rs_line: usize) -> Option<&SourceLocation> {
+        self.mappings.get(rs_line).and_then(|loc| loc.as_ref())
     }
 }
 

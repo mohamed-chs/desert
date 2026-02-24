@@ -8,6 +8,7 @@ pub mod transpiler;
 
 use crate::lexer::Lexer;
 use crate::parser::parse_program;
+use crate::sourcemap::SourceLocation;
 use crate::transpiler::Transpiler;
 
 type ParserError<'a> = NomErr<NomError<&'a [crate::parser::TokenSpan]>>;
@@ -55,8 +56,8 @@ fn main() -> anyhow::Result<()> {
 
     match cli.command {
         Commands::Transpile { input, output } => {
-            let input_content = load_input_source(&input)?;
-            let (rust_code, _) = transpile_file(&input_content)?;
+            let input_source = load_input_source(&input)?;
+            let (rust_code, _) = transpile_file(&input_source)?;
             if let Some(output_path) = output {
                 fs::write(output_path, rust_code)?;
             } else {
@@ -64,8 +65,8 @@ fn main() -> anyhow::Result<()> {
             }
         }
         Commands::Check { input } => {
-            let input_content = load_input_source(&input)?;
-            let (rust_code, source_map) = transpile_file(&input_content)?;
+            let input_source = load_input_source(&input)?;
+            let (rust_code, source_map) = transpile_file(&input_source)?;
 
             let temp_dir = unique_temp_dir();
             fs::create_dir_all(&temp_dir)?;
@@ -126,9 +127,18 @@ struct ManifestPackage {
     entry: Option<PathBuf>,
 }
 
-fn load_input_source(input: &Path) -> anyhow::Result<String> {
+struct InputSource {
+    content: String,
+    line_origins: Vec<SourceLocation>,
+}
+
+fn load_input_source(input: &Path) -> anyhow::Result<InputSource> {
     if input.is_file() {
-        return fs::read_to_string(input).map_err(Into::into);
+        let content = fs::read_to_string(input)?;
+        return Ok(InputSource {
+            line_origins: line_origins_for_file(input, &content)?,
+            content,
+        });
     }
     if input.is_dir() {
         return load_project_source(input);
@@ -172,13 +182,48 @@ fn resolve_project_entry(project_root: &Path) -> anyhow::Result<PathBuf> {
     }
 }
 
-fn load_project_source(project_root: &Path) -> anyhow::Result<String> {
+fn load_project_source(project_root: &Path) -> anyhow::Result<InputSource> {
     let (_, ordered_files) = resolve_project_graph(project_root)?;
-    let mut pieces = Vec::with_capacity(ordered_files.len());
+    let mut content = String::new();
+    let mut line_origins = Vec::new();
+
     for file in ordered_files {
-        pieces.push(fs::read_to_string(file)?);
+        let piece = fs::read_to_string(&file)?;
+        if !content.is_empty() && !content.ends_with('\n') {
+            content.push('\n');
+        }
+        content.push_str(&piece);
+        line_origins.extend(line_origins_for_file(&file, &piece)?);
     }
-    Ok(pieces.join("\n\n"))
+
+    Ok(InputSource {
+        content,
+        line_origins,
+    })
+}
+
+fn line_origins_for_file(file_path: &Path, content: &str) -> anyhow::Result<Vec<SourceLocation>> {
+    let file_name = format_display_path(file_path)?;
+    let mut origins = Vec::new();
+    for (idx, _) in content.lines().enumerate() {
+        origins.push(SourceLocation {
+            file: file_name.clone(),
+            line: idx + 1,
+        });
+    }
+    Ok(origins)
+}
+
+fn format_display_path(path: &Path) -> anyhow::Result<String> {
+    let canonical = path
+        .canonicalize()
+        .map_err(|err| anyhow::anyhow!("failed to canonicalize '{}': {}", path.display(), err))?;
+    if let Ok(cwd) = std::env::current_dir() {
+        if let Ok(relative) = canonical.strip_prefix(&cwd) {
+            return Ok(relative.display().to_string());
+        }
+    }
+    Ok(canonical.display().to_string())
 }
 
 fn resolve_project_graph(project_root: &Path) -> anyhow::Result<(PathBuf, Vec<PathBuf>)> {
@@ -306,11 +351,15 @@ fn resolve_import_path(
     Ok(canonical)
 }
 
-fn transpile_file(input_content: &str) -> anyhow::Result<(String, crate::sourcemap::SourceMap)> {
-    let program = parse_source(input_content)?;
-    validate_program(input_content, &program)?;
+fn transpile_file(input_source: &InputSource) -> anyhow::Result<(String, crate::sourcemap::SourceMap)> {
+    let program = parse_source(&input_source.content)?;
+    validate_program(&input_source.content, &program)?;
     let transpiler = Transpiler::new();
-    Ok(transpiler.transpile(&program, input_content))
+    Ok(transpiler.transpile(
+        &program,
+        &input_source.content,
+        &input_source.line_origins,
+    ))
 }
 
 fn parse_source(input_content: &str) -> anyhow::Result<crate::ast::Program> {

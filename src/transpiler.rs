@@ -1,10 +1,29 @@
 use crate::ast::*;
 use crate::resolver::Resolver;
-use crate::sourcemap::SourceMap;
+use crate::sourcemap::{SourceLocation, SourceMap};
 use std::collections::HashMap;
 use std::collections::HashSet;
 
 const MATMUL_PRELUDE: &str = "trait DesertMatMul<Rhs> {\n    type Output;\n    fn desert_matmul(self, rhs: Rhs) -> Self::Output;\n}\n\nimpl DesertMatMul<Vec<f32>> for Vec<f32> {\n    type Output = Vec<f32>;\n\n    fn desert_matmul(self, rhs: Vec<f32>) -> Self::Output {\n        vec![self.into_iter().zip(rhs).map(|(a, b)| a * b).sum()]\n    }\n}\n\nimpl DesertMatMul<Vec<f32>> for Vec<Vec<f32>> {\n    type Output = Vec<f32>;\n\n    fn desert_matmul(self, rhs: Vec<f32>) -> Self::Output {\n        self.into_iter()\n            .map(|row| row.into_iter().zip(rhs.iter().copied()).map(|(a, b)| a * b).sum())\n            .collect()\n    }\n}\n\nfn desert_matmul<L, R>(lhs: L, rhs: R) -> <L as DesertMatMul<R>>::Output\nwhere\n    L: DesertMatMul<R>,\n{\n    lhs.desert_matmul(rhs)\n}\n\n";
+
+fn generated_location() -> SourceLocation {
+    SourceLocation {
+        file: "<generated>".to_string(),
+        line: 0,
+    }
+}
+
+fn statement_location(
+    source: &str,
+    stmt: &Statement,
+    line_origins: &[SourceLocation],
+) -> SourceLocation {
+    let ds_line = source[..stmt.span.start].lines().count().saturating_sub(1);
+    line_origins
+        .get(ds_line)
+        .cloned()
+        .unwrap_or_else(generated_location)
+}
 
 pub struct Transpiler;
 
@@ -13,7 +32,12 @@ impl Transpiler {
         Self
     }
 
-    pub fn transpile(&self, program: &Program, source: &str) -> (String, SourceMap) {
+    pub fn transpile(
+        &self,
+        program: &Program,
+        source: &str,
+        line_origins: &[SourceLocation],
+    ) -> (String, SourceMap) {
         let mut output = String::new();
         let mut source_map = SourceMap::new();
         let mut current_line = 0;
@@ -26,7 +50,7 @@ impl Transpiler {
         if uses_matmul {
             output.push_str(MATMUL_PRELUDE);
             for _ in MATMUL_PRELUDE.lines() {
-                source_map.add_mapping(current_line, 0);
+                source_map.add_mapping(current_line, generated_location());
                 current_line += 1;
             }
         }
@@ -35,6 +59,7 @@ impl Transpiler {
             &program.statements,
             0,
             source,
+            line_origins,
             &struct_fields,
             &protocol_names,
             &mut resolver,
@@ -51,6 +76,7 @@ impl Transpiler {
         statements: &[Statement],
         indent: usize,
         source: &str,
+        line_origins: &[SourceLocation],
         struct_fields: &HashMap<String, Vec<String>>,
         protocol_names: &HashSet<String>,
         resolver: &mut Resolver,
@@ -59,7 +85,7 @@ impl Transpiler {
         current_line: &mut usize,
     ) {
         for stmt in statements {
-            let ds_line = source[..stmt.span.start].lines().count().saturating_sub(1);
+            let stmt_location = statement_location(source, stmt, line_origins);
 
             match &stmt.kind {
                 StatementKind::Def {
@@ -109,7 +135,7 @@ impl Transpiler {
                         ret_str
                     );
                     output.push_str(&header);
-                    source_map.add_mapping(*current_line, ds_line);
+                    source_map.add_mapping(*current_line, stmt_location.clone());
                     *current_line += 1;
 
                     resolver.declare_value(name);
@@ -121,6 +147,7 @@ impl Transpiler {
                         body,
                         indent + 1,
                         source,
+                        line_origins,
                         struct_fields,
                         protocol_names,
                         resolver,
@@ -132,7 +159,7 @@ impl Transpiler {
 
                     let footer = format!("{}}}\n", indent_str);
                     output.push_str(&footer);
-                    source_map.add_mapping(*current_line, ds_line);
+                    source_map.add_mapping(*current_line, stmt_location.clone());
                     *current_line += 1;
                 }
                 StatementKind::If {
@@ -147,7 +174,7 @@ impl Transpiler {
                         self.transpile_expression(condition, struct_fields, resolver)
                     );
                     output.push_str(&header);
-                    source_map.add_mapping(*current_line, ds_line);
+                    source_map.add_mapping(*current_line, stmt_location.clone());
                     *current_line += 1;
 
                     resolver.enter_scope();
@@ -155,6 +182,7 @@ impl Transpiler {
                         then_block,
                         indent + 1,
                         source,
+                        line_origins,
                         struct_fields,
                         protocol_names,
                         resolver,
@@ -167,13 +195,14 @@ impl Transpiler {
                     if let Some(else_b) = else_block {
                         let mid = format!("{}}} else {{\n", indent_str);
                         output.push_str(&mid);
-                        source_map.add_mapping(*current_line, ds_line);
+                        source_map.add_mapping(*current_line, stmt_location.clone());
                         *current_line += 1;
                         resolver.enter_scope();
                         self.transpile_statements(
                             else_b,
                             indent + 1,
                             source,
+                            line_origins,
                             struct_fields,
                             protocol_names,
                             resolver,
@@ -186,7 +215,7 @@ impl Transpiler {
 
                     let footer = format!("{}}}\n", indent_str);
                     output.push_str(&footer);
-                    source_map.add_mapping(*current_line, ds_line);
+                    source_map.add_mapping(*current_line, stmt_location.clone());
                     *current_line += 1;
                 }
                 StatementKind::For {
@@ -202,7 +231,7 @@ impl Transpiler {
                         self.transpile_expression(iterable, struct_fields, resolver)
                     );
                     output.push_str(&header);
-                    source_map.add_mapping(*current_line, ds_line);
+                    source_map.add_mapping(*current_line, stmt_location.clone());
                     *current_line += 1;
 
                     resolver.enter_scope();
@@ -211,6 +240,7 @@ impl Transpiler {
                         body,
                         indent + 1,
                         source,
+                        line_origins,
                         struct_fields,
                         protocol_names,
                         resolver,
@@ -222,14 +252,14 @@ impl Transpiler {
 
                     let footer = format!("{}}}\n", indent_str);
                     output.push_str(&footer);
-                    source_map.add_mapping(*current_line, ds_line);
+                    source_map.add_mapping(*current_line, stmt_location.clone());
                     *current_line += 1;
                 }
                 StatementKind::Struct { name, fields } => {
                     let indent_str = "    ".repeat(indent);
                     let header = format!("{}struct {} {{\n", indent_str, name);
                     output.push_str(&header);
-                    source_map.add_mapping(*current_line, ds_line);
+                    source_map.add_mapping(*current_line, stmt_location.clone());
                     *current_line += 1;
 
                     for field in fields {
@@ -242,26 +272,27 @@ impl Transpiler {
                             "{}    pub {}: {},\n",
                             indent_str, field.name, f_ty
                         ));
-                        source_map.add_mapping(*current_line, ds_line);
+                        source_map.add_mapping(*current_line, stmt_location.clone());
                         *current_line += 1;
                     }
 
                     let footer = format!("{}}}\n", indent_str);
                     output.push_str(&footer);
-                    source_map.add_mapping(*current_line, ds_line);
+                    source_map.add_mapping(*current_line, stmt_location.clone());
                     *current_line += 1;
                 }
                 StatementKind::Protocol { name, methods } => {
                     let indent_str = "    ".repeat(indent);
                     let header = format!("{}trait {} {{\n", indent_str, name);
                     output.push_str(&header);
-                    source_map.add_mapping(*current_line, ds_line);
+                    source_map.add_mapping(*current_line, stmt_location.clone());
                     *current_line += 1;
 
                     self.transpile_statements(
                         methods,
                         indent + 1,
                         source,
+                        line_origins,
                         struct_fields,
                         protocol_names,
                         resolver,
@@ -272,7 +303,7 @@ impl Transpiler {
 
                     let footer = format!("{}}}\n", indent_str);
                     output.push_str(&footer);
-                    source_map.add_mapping(*current_line, ds_line);
+                    source_map.add_mapping(*current_line, stmt_location.clone());
                     *current_line += 1;
                 }
                 StatementKind::Impl {
@@ -287,13 +318,14 @@ impl Transpiler {
                         format!("{}impl {} {{\n", indent_str, for_type)
                     };
                     output.push_str(&header);
-                    source_map.add_mapping(*current_line, ds_line);
+                    source_map.add_mapping(*current_line, stmt_location.clone());
                     *current_line += 1;
 
                     self.transpile_statements(
                         methods,
                         indent + 1,
                         source,
+                        line_origins,
                         struct_fields,
                         protocol_names,
                         resolver,
@@ -304,7 +336,7 @@ impl Transpiler {
 
                     let footer = format!("{}}}\n", indent_str);
                     output.push_str(&footer);
-                    source_map.add_mapping(*current_line, ds_line);
+                    source_map.add_mapping(*current_line, stmt_location.clone());
                     *current_line += 1;
                 }
                 StatementKind::PyImport(content) => {
@@ -312,19 +344,18 @@ impl Transpiler {
                     output.push_str(&format!("{}/* Desert PyImport block:\n", indent_str));
                     output.push_str(&format!("{}   {}\n", indent_str, content));
                     output.push_str(&format!("{}*/\n", indent_str));
-                    source_map.add_mapping(*current_line, ds_line);
+                    source_map.add_mapping(*current_line, stmt_location.clone());
                     *current_line += 3;
                 }
                 StatementKind::Import(_) => {}
                 StatementKind::Match { expression, arms } => {
-                    let ds_line = source[..stmt.span.start].lines().count().saturating_sub(1);
                     let header = format!(
                         "{}match {} {{\n",
                         "    ".repeat(indent),
                         self.transpile_expression(expression, struct_fields, resolver)
                     );
                     output.push_str(&header);
-                    source_map.add_mapping(*current_line, ds_line);
+                    source_map.add_mapping(*current_line, stmt_location.clone());
                     *current_line += 1;
 
                     for (pattern, body) in arms {
@@ -334,7 +365,7 @@ impl Transpiler {
                             self.transpile_expression(pattern, struct_fields, resolver)
                         );
                         output.push_str(&arm_header);
-                        source_map.add_mapping(*current_line, ds_line);
+                        source_map.add_mapping(*current_line, stmt_location.clone());
                         *current_line += 1;
 
                         resolver.enter_scope();
@@ -342,6 +373,7 @@ impl Transpiler {
                             body,
                             indent + 2,
                             source,
+                            line_origins,
                             struct_fields,
                             protocol_names,
                             resolver,
@@ -353,20 +385,20 @@ impl Transpiler {
 
                         let arm_footer = format!("{}    }}\n", "    ".repeat(indent));
                         output.push_str(&arm_footer);
-                        source_map.add_mapping(*current_line, ds_line);
+                        source_map.add_mapping(*current_line, stmt_location.clone());
                         *current_line += 1;
                     }
 
                     let footer = format!("{}}}\n", "    ".repeat(indent));
                     output.push_str(&footer);
-                    source_map.add_mapping(*current_line, ds_line);
+                    source_map.add_mapping(*current_line, stmt_location.clone());
                     *current_line += 1;
                 }
                 _ => {
                     let stmt_output =
                         self.transpile_statement(stmt, indent, struct_fields, resolver);
                     for _ in stmt_output.lines() {
-                        source_map.add_mapping(*current_line, ds_line);
+                        source_map.add_mapping(*current_line, stmt_location.clone());
                         *current_line += 1;
                     }
                     output.push_str(&stmt_output);
@@ -916,6 +948,26 @@ mod tests {
     use crate::lexer::Lexer;
     use crate::parser::parse_program;
 
+    fn test_line_origins(input: &str) -> Vec<SourceLocation> {
+        let mut origins = Vec::new();
+        for (idx, _) in input.lines().enumerate() {
+            origins.push(SourceLocation {
+                file: "<test>".to_string(),
+                line: idx + 1,
+            });
+        }
+        origins
+    }
+
+    fn transpile_program(
+        transpiler: &Transpiler,
+        program: &Program,
+        input: &str,
+    ) -> (String, SourceMap) {
+        let origins = test_line_origins(input);
+        transpiler.transpile(program, input, &origins)
+    }
+
     #[test]
 
     fn test_transpile_basic() {
@@ -929,7 +981,7 @@ mod tests {
 
         let transpiler = Transpiler::new();
 
-        let (rust_code, _) = transpiler.transpile(&program, input);
+        let (rust_code, _) = transpile_program(&transpiler, &program, input);
 
         let expected = "let x = 10;\nfn foo(y) {\n    let z = y;\n    z;\n}\n";
 
@@ -959,7 +1011,7 @@ mod tests {
 
         let transpiler = Transpiler::new();
 
-        let (rust_code, _) = transpiler.transpile(&program, input.trim());
+        let (rust_code, _) = transpile_program(&transpiler, &program, input.trim());
 
         let expected = "fn factorial(n) -> impl std::fmt::Debug {\n    if (n == 0) {\n        return 1;\n    }\n    return (n * factorial((n - 1)));\n}\n";
 
@@ -979,7 +1031,7 @@ mod tests {
 
         let transpiler = Transpiler::new();
 
-        let (rust_code, _) = transpiler.transpile(&program, input);
+        let (rust_code, _) = transpile_program(&transpiler, &program, input);
 
         let expected = "fn main() {\n    println!(\"{}\", \"Hello, Desert!\".to_string());\n}\n";
 
@@ -993,7 +1045,7 @@ mod tests {
         let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
         let (_, program) = parse_program(&tokens).unwrap();
         let transpiler = Transpiler::new();
-        let (rust_code, _) = transpiler.transpile(&program, input);
+        let (rust_code, _) = transpile_program(&transpiler, &program, input);
         let expected = "fn main() {\n    println!(\"{}\", format!(\"port {:?}\", cfg.port));\n}\n";
         assert_eq!(rust_code, expected);
     }
@@ -1005,7 +1057,7 @@ mod tests {
         let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
         let (_, program) = parse_program(&tokens).unwrap();
         let transpiler = Transpiler::new();
-        let (rust_code, _) = transpiler.transpile(&program, input);
+        let (rust_code, _) = transpile_program(&transpiler, &program, input);
         let expected = "fn main() {\n    println!(\"{}\", vec![\"x\".to_string(), format!(\"{:?}\", val), format!(\"{:?}\", list)].join(\" \"));\n}\n";
         assert_eq!(rust_code, expected);
     }
@@ -1017,7 +1069,7 @@ mod tests {
         let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
         let (_, program) = parse_program(&tokens).unwrap();
         let transpiler = Transpiler::new();
-        let (rust_code, _) = transpiler.transpile(&program, input);
+        let (rust_code, _) = transpile_program(&transpiler, &program, input);
         assert!(rust_code.contains("fn desert_matmul"));
         assert!(rust_code.contains("let out = desert_matmul((a).clone(), (b).clone());"));
     }
@@ -1035,7 +1087,7 @@ mod tests {
 
         let transpiler = Transpiler::new();
 
-        let (rust_code, _) = transpiler.transpile(&program, input);
+        let (rust_code, _) = transpile_program(&transpiler, &program, input);
 
         assert_eq!(rust_code, "let x: Vec<i32> = vec![1, 2, 3];\n");
     }
@@ -1053,7 +1105,7 @@ mod tests {
 
         let transpiler = Transpiler::new();
 
-        let (rust_code, _) = transpiler.transpile(&program, input);
+        let (rust_code, _) = transpile_program(&transpiler, &program, input);
 
         assert_eq!(
             rust_code,
@@ -1068,7 +1120,7 @@ mod tests {
         let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
         let (_, program) = parse_program(&tokens).unwrap();
         let transpiler = Transpiler::new();
-        let (rust_code, _) = transpiler.transpile(&program, input);
+        let (rust_code, _) = transpile_program(&transpiler, &program, input);
         let expected = "let mut x = 10;\nlet y = std::mem::take(&mut x);\n";
         assert_eq!(rust_code, expected);
     }
@@ -1080,7 +1132,7 @@ mod tests {
         let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
         let (_, program) = parse_program(&tokens).unwrap();
         let transpiler = Transpiler::new();
-        let (rust_code, _) = transpiler.transpile(&program, input);
+        let (rust_code, _) = transpile_program(&transpiler, &program, input);
         let expected = "let mut x = 1;\nlet shared: &i32 = &x;\nlet unique: &mut i32 = &mut x;\n";
         assert_eq!(rust_code, expected);
     }
@@ -1098,7 +1150,7 @@ mod tests {
 
         let transpiler = Transpiler::new();
 
-        let (rust_code, _) = transpiler.transpile(&program, input);
+        let (rust_code, _) = transpile_program(&transpiler, &program, input);
 
         assert_eq!(
             rust_code,
@@ -1113,7 +1165,7 @@ mod tests {
         let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
         let (_, program) = parse_program(&tokens).unwrap();
         let transpiler = Transpiler::new();
-        let (rust_code, _) = transpiler.transpile(&program, input);
+        let (rust_code, _) = transpile_program(&transpiler, &program, input);
 
         assert_eq!(rust_code, "let Path = 1;\nlet y = Path.new();\n");
     }
@@ -1125,7 +1177,7 @@ mod tests {
         let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
         let (_, program) = parse_program(&tokens).unwrap();
         let transpiler = Transpiler::new();
-        let (rust_code, _) = transpiler.transpile(&program, input);
+        let (rust_code, _) = transpile_program(&transpiler, &program, input);
 
         assert_eq!(
             rust_code,
@@ -1140,7 +1192,7 @@ mod tests {
         let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
         let (_, program) = parse_program(&tokens).unwrap();
         let transpiler = Transpiler::new();
-        let (rust_code, _) = transpiler.transpile(&program, input);
+        let (rust_code, _) = transpile_program(&transpiler, &program, input);
         assert_eq!(rust_code, "let y = Path.new();\n");
     }
 
@@ -1151,7 +1203,7 @@ mod tests {
         let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
         let (_, program) = parse_program(&tokens).unwrap();
         let transpiler = Transpiler::new();
-        let (rust_code, _) = transpiler.transpile(&program, input);
+        let (rust_code, _) = transpile_program(&transpiler, &program, input);
         let expected = "if (x > 0) {\n    return 1;\n} else {\n    return 0;\n}\n";
         assert_eq!(rust_code, expected);
     }
@@ -1163,7 +1215,7 @@ mod tests {
         let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
         let (_, program) = parse_program(&tokens).unwrap();
         let transpiler = Transpiler::new();
-        let (rust_code, _) = transpiler.transpile(&program, input);
+        let (rust_code, _) = transpile_program(&transpiler, &program, input);
         let expected = "struct Point {\n    pub x: i32,\n    pub y: i32,\n}\n";
         assert_eq!(rust_code, expected);
     }
@@ -1175,7 +1227,7 @@ mod tests {
         let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
         let (_, program) = parse_program(&tokens).unwrap();
         let transpiler = Transpiler::new();
-        let (rust_code, _) = transpiler.transpile(&program, input);
+        let (rust_code, _) = transpile_program(&transpiler, &program, input);
         let expected =
             "struct Point {\n    pub x: i32,\n    pub y: i32,\n}\nlet p = Point { x: 1, y: 2 };\n";
         assert_eq!(rust_code, expected);
@@ -1188,7 +1240,7 @@ mod tests {
         let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
         let (_, program) = parse_program(&tokens).unwrap();
         let transpiler = Transpiler::new();
-        let (rust_code, _) = transpiler.transpile(&program, input);
+        let (rust_code, _) = transpile_program(&transpiler, &program, input);
         let expected = "struct Scale {\n    pub factor: f64,\n}\nlet s = Scale { factor: 1.5 };\n";
         assert_eq!(rust_code, expected);
     }
@@ -1200,7 +1252,7 @@ mod tests {
         let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
         let (_, program) = parse_program(&tokens).unwrap();
         let transpiler = Transpiler::new();
-        let (rust_code, _) = transpiler.transpile(&program, input);
+        let (rust_code, _) = transpile_program(&transpiler, &program, input);
         let expected = "trait Speak {\n    fn talk(&self) -> String {\n        return \"\".to_string();\n    }\n}\n";
         assert_eq!(rust_code, expected);
     }
@@ -1212,7 +1264,7 @@ mod tests {
         let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
         let (_, program) = parse_program(&tokens).unwrap();
         let transpiler = Transpiler::new();
-        let (rust_code, _) = transpiler.transpile(&program, input);
+        let (rust_code, _) = transpile_program(&transpiler, &program, input);
         let expected = "impl Speak for Dog {\n    fn talk(&self) -> String {\n        return \"Woof\".to_string();\n    }\n}\n";
         assert_eq!(rust_code, expected);
     }
@@ -1224,7 +1276,7 @@ mod tests {
         let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
         let (_, program) = parse_program(&tokens).unwrap();
         let transpiler = Transpiler::new();
-        let (rust_code, _) = transpiler.transpile(&program, input);
+        let (rust_code, _) = transpile_program(&transpiler, &program, input);
         let expected = "impl Counter {\n    fn inc(&mut self) {\n        (self.value = (self.value + 1));\n    }\n}\n";
         assert_eq!(rust_code, expected);
     }
@@ -1236,7 +1288,7 @@ mod tests {
         let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
         let (_, program) = parse_program(&tokens).unwrap();
         let transpiler = Transpiler::new();
-        let (rust_code, _) = transpiler.transpile(&program, input);
+        let (rust_code, _) = transpile_program(&transpiler, &program, input);
         let expected = "let x = foo()?;\nlet y = bar().unwrap();\n";
         assert_eq!(rust_code, expected);
     }
@@ -1248,7 +1300,7 @@ mod tests {
         let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
         let (_, program) = parse_program(&tokens).unwrap();
         let transpiler = Transpiler::new();
-        let (rust_code, _) = transpiler.transpile(&program, input);
+        let (rust_code, _) = transpile_program(&transpiler, &program, input);
         assert!(rust_code.contains("/* Desert PyImport block:"));
         assert!(rust_code.contains("import torch"));
     }
@@ -1260,7 +1312,7 @@ mod tests {
         let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
         let (_, program) = parse_program(&tokens).unwrap();
         let transpiler = Transpiler::new();
-        let (rust_code, _) = transpiler.transpile(&program, input);
+        let (rust_code, _) = transpile_program(&transpiler, &program, input);
         assert!(rust_code.contains("if x {"));
         assert!(rust_code.contains("for i in list {"));
     }
@@ -1272,7 +1324,7 @@ mod tests {
         let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
         let (_, program) = parse_program(&tokens).unwrap();
         let transpiler = Transpiler::new();
-        let (rust_code, _) = transpiler.transpile(&program, input);
+        let (rust_code, _) = transpile_program(&transpiler, &program, input);
         assert!(rust_code.contains("obj.method::<T1, T2>(arg1, arg2)"));
     }
 }

@@ -1,0 +1,2 @@
+[package]
+entry = "src/main.ds"

@@ -18,7 +18,7 @@ Core quality checks currently pass:
 - `src/parser.rs`: Recursive-descent parser over token spans.
 - `src/transpiler.rs`: AST to Rust code generation plus source map creation.
 - `src/resolver.rs`: Lightweight scoped type/value symbol tracker for unified-dot lowering.
-- `src/sourcemap.rs`: Line-based Rust-to-Desert mapping.
+- `src/sourcemap.rs`: Rust-to-Desert mapping with source file + line locations.
 - `src/mirage.rs`: Rust diagnostic translation to Desert terminology.
 - `src/main.rs`: CLI entry point (`transpile`, `check`) and diagnostics plumbing.
 - `src/main.rs`: CLI entry point (`transpile`, `check`, `graph`) and diagnostics plumbing.
@@ -63,20 +63,20 @@ Core quality checks currently pass:
 - Added pre-Rust struct-constructor argument validation so `Type(...)` now fails fast on unknown/duplicate named fields, positional overflow, and missing required fields instead of deferring to rustc.
 - Removed statement-level borrow declarations (`ref`, `mut ref`) from AST/parser/transpiler. Borrow binding is now expression-only (`let a = &x`, `let b = ~x`), and `ref` is no longer a reserved keyword.
 - Added `import` parsing and project graph loading so multi-file projects compile from a single entrypoint.
+- Added file-aware diagnostic mapping so `desert check <project_dir>` now reports imported-module paths with Desert line numbers (for example, `src/util/math.ds:2`).
 
 ## Known Gaps
 
 - No project-level dependency management yet.
 - No package/dependency management yet beyond local file imports.
-- Project diagnostics are still line-based and do not yet report per-file spans for combined imports.
+- Rust diagnostics still map by line (not precise columns) after transpilation.
 - Resolver is heuristic, not semantic.
 - Mirage translations are simple string rewrites.
-- Source map is line-based only.
 - Matmul lowering currently targets specific float vector/matrix shapes.
 
 ## Recommended Next Steps
 
-1. Add first-class file-aware source mapping for project imports (file + line + column diagnostics).
+1. Improve file-aware source mapping from file+line to source-accurate file+line+column diagnostics.
 2. Add basic tooling primitives first (formatter scaffold, cache-key groundwork for faster checks, CI command split).
 3. Expand Mirage hints with ownership/lifetime-oriented guidance as diagnostics layer work.
 4. Convert `pyimport` into executable interop scaffolding later.

@@ -43,14 +43,13 @@ The design priority is explicit semantics with predictable lowering. Syntax that
 
 Project mode resolves top-level `import` statements recursively, loads imported files before importers, and rejects import cycles.
 
-`check` transpiles to Rust, runs `rustc --emit=metadata --error-format=json`, and maps diagnostics back to Desert source lines.
+`check` transpiles to Rust, runs `rustc --emit=metadata --error-format=json`, and maps diagnostics back to Desert source file+line locations.
 
 ## Current Limits
 
-- No per-file span diagnostics yet in project mode (imports compile as a combined source stream today).
+- Rust diagnostics are mapped at file+line granularity; column mapping is not yet source-accurate.
 - Resolver is scoped symbol tracking, not full type inference.
 - `pyimport` is preserved as Rust comments.
-- Source map is line-based.
 - `@` lowering is currently specialized to float vector/matrix helpers.
 
 ## Direction

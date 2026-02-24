@@ -41,14 +41,17 @@ impl Mirage {
         translated = translated.replace("::", ".");
 
         let mut locations = String::new();
+        let mut seen = std::collections::HashSet::new();
         for span in &msg.spans {
             // rustc lines are 1-based. SourceMap uses 0-based.
             let rs_line = span.line_start.saturating_sub(1);
-            if let Some(ds_line) = source_map.get_ds_line(rs_line) {
+            if let Some(ds_loc) = source_map.get_location(rs_line) {
+                if !seen.insert((ds_loc.file.clone(), ds_loc.line)) {
+                    continue;
+                }
                 locations.push_str(&format!(
-                    "
-  Line {}: in Desert source",
-                    ds_line + 1
+                    "\n  {}:{}: in Desert source",
+                    ds_loc.file, ds_loc.line
                 ));
             }
         }
@@ -78,7 +81,7 @@ impl Mirage {
 #[cfg(test)]
 mod tests {
     use super::{Diagnostic, DiagnosticCode, DiagnosticSpan, Mirage};
-    use crate::sourcemap::SourceMap;
+    use crate::sourcemap::{SourceLocation, SourceMap};
 
     fn span(rs_line_1_based: usize) -> DiagnosticSpan {
         DiagnosticSpan {
@@ -91,7 +94,13 @@ mod tests {
     #[test]
     fn translate_error_adds_mutability_hint_and_desert_line() {
         let mut source_map = SourceMap::new();
-        source_map.add_mapping(2, 8);
+        source_map.add_mapping(
+            2,
+            SourceLocation {
+                file: "example.ds".to_string(),
+                line: 9,
+            },
+        );
         let msg = Diagnostic {
             message: "cannot borrow `xs` as mutable, as it is not declared as mutable".to_string(),
             code: Some(DiagnosticCode {
@@ -104,7 +113,7 @@ mod tests {
         assert!(
             translated.contains("Hint: Declare the binding with `mut` before using `~` or `move`.")
         );
-        assert!(translated.contains("Line 9: in Desert source"));
+        assert!(translated.contains("example.ds:9: in Desert source"));
     }
 
     #[test]
