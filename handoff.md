@@ -41,6 +41,7 @@ Core quality checks currently pass:
 - Added protocol parameter lowering to Rust `impl Trait`.
 - Added `@` lowering to generated `desert_matmul(...)` helpers.
 - Added `desert check` integration coverage for all examples in `tests/check_examples.rs`.
+- Added a negative `desert check` integration fixture to assert translated failure diagnostics.
 
 ## Known Gaps
 
@@ -52,7 +53,7 @@ Core quality checks currently pass:
 
 ## Recommended Next Steps
 
-1. Expand integration checks with negative/failure-path fixtures (expected diagnostics).
+1. Expand integration checks with more negative/failure-path fixtures (expected diagnostics).
 2. Introduce a richer resolver pass with scoped symbols.
 3. Expand Mirage translation with targeted borrow-checker hints.
 4. Evolve `pyimport` from comment passthrough to concrete interop scaffolding.

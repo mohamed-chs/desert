@@ -55,3 +55,17 @@ fn check_data_processing_example() {
 fn check_linked_list_example() {
     run_check("linked_list.ds");
 }
+
+#[test]
+fn check_reports_translated_diagnostics_for_type_mismatch_fixture() {
+    let mut cmd = cargo_bin_cmd!("desert");
+    cmd.arg("check")
+        .arg("tests/fixtures/check_fail_type_mismatch.ds");
+    cmd.assert()
+        .failure()
+        .stdout(predicates::str::contains("mismatched types"))
+        .stdout(predicates::str::contains("Line 2: in Desert source"))
+        .stderr(predicates::str::contains(
+            "Rust check failed with translated diagnostics.",
+        ));
+}
