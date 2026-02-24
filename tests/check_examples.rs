@@ -117,6 +117,30 @@ fn check_reports_unique_ref_mutability_failure_with_desert_location() {
 }
 
 #[test]
+fn check_reports_move_non_place_failure_with_desert_location() {
+    let mut cmd = cargo_bin_cmd!("desert");
+    cmd.arg("check")
+        .arg("tests/fixtures/check_fail_move_non_place.ds");
+    cmd.assert()
+        .failure()
+        .stderr(predicates::str::contains(
+            "Semantic error at line 2, column 5: `move` expects a mutable place expression",
+        ));
+}
+
+#[test]
+fn check_reports_unique_ref_non_place_failure_with_desert_location() {
+    let mut cmd = cargo_bin_cmd!("desert");
+    cmd.arg("check")
+        .arg("tests/fixtures/check_fail_unique_ref_non_place.ds");
+    cmd.assert()
+        .failure()
+        .stderr(predicates::str::contains(
+            "Semantic error at line 2, column 5: `~` expects a mutable place expression",
+        ));
+}
+
+#[test]
 fn check_reports_method_resolution_failure_with_desert_line_mapping() {
     let mut cmd = cargo_bin_cmd!("desert");
     cmd.arg("check")

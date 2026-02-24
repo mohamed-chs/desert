@@ -311,21 +311,51 @@ fn validate_mutable_binding(
     op_name: &str,
     offset: usize,
 ) -> Result<(), SemanticError> {
-    match expr {
-        crate::ast::Expression::Ident(name) => {
-            if is_mutable(name, scopes) {
-                Ok(())
-            } else {
-                Err(SemanticError {
-                    offset,
-                    message: format!(
-                        "`{}` requires mutable binding `{}` (declare with `mut` first)",
-                        op_name, name
-                    ),
-                })
-            }
+    if !is_place_expression(expr) {
+        return Err(SemanticError {
+            offset,
+            message: format!(
+                "`{}` expects a mutable place expression (`x`, `obj.field`, or `items[i]`)",
+                op_name
+            ),
+        });
+    }
+
+    if let Some(root) = place_root_ident(expr) {
+        if is_mutable(root, scopes) {
+            Ok(())
+        } else {
+            Err(SemanticError {
+                offset,
+                message: format!(
+                    "`{}` requires mutable binding `{}` (declare with `mut` first)",
+                    op_name, root
+                ),
+            })
         }
-        _ => Ok(()),
+    } else {
+        Err(SemanticError {
+            offset,
+            message: format!("`{}` requires a mutable local binding", op_name),
+        })
+    }
+}
+
+fn is_place_expression(expr: &crate::ast::Expression) -> bool {
+    match expr {
+        crate::ast::Expression::Ident(_) => true,
+        crate::ast::Expression::MemberAccess(inner, _) => is_place_expression(inner),
+        crate::ast::Expression::Index(inner, _) => is_place_expression(inner),
+        _ => false,
+    }
+}
+
+fn place_root_ident(expr: &crate::ast::Expression) -> Option<&str> {
+    match expr {
+        crate::ast::Expression::Ident(name) => Some(name.as_str()),
+        crate::ast::Expression::MemberAccess(inner, _)
+        | crate::ast::Expression::Index(inner, _) => place_root_ident(inner),
+        _ => None,
     }
 }
 

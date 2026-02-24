@@ -14,7 +14,7 @@ This roadmap focuses on shipping a stable core before expanding syntax.
 
 - Replace capitalization heuristics with scoped symbol tracking.
 - Improve generic resolution for static functions vs methods.
-- Validate `move` usage and borrow forms more explicitly before Rust emit. (Now rejects `move x` / `~x` when `x` is not declared `mut`, before rustc)
+- Validate `move` usage and borrow forms more explicitly before Rust emit. (Now rejects `move x` / `~x` when `x` is not declared `mut`, and rejects non-place operands like `move foo()` / `~foo()`, before rustc)
 
 ## Phase 3: Mirage Quality
 
