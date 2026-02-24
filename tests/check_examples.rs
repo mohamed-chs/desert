@@ -310,3 +310,34 @@ fn graph_rejects_file_input() {
         .failure()
         .stderr(predicates::str::contains("must be a project directory"));
 }
+
+#[test]
+fn run_file_executes_program() {
+    let mut cmd = cargo_bin_cmd!("desert");
+    cmd.arg("run").arg("examples/hello_world.ds");
+    cmd.assert()
+        .success()
+        .stdout(predicates::str::contains("Hello, Desert!"));
+}
+
+#[test]
+fn run_project_executes_program() {
+    let mut cmd = cargo_bin_cmd!("desert");
+    cmd.arg("run").arg("tests/fixtures/project_ok");
+    cmd.assert()
+        .success()
+        .stdout(predicates::str::contains("project ok"));
+}
+
+#[test]
+fn run_reports_translated_diagnostics_for_compile_failure() {
+    let mut cmd = cargo_bin_cmd!("desert");
+    cmd.arg("run")
+        .arg("tests/fixtures/check_fail_type_mismatch.ds");
+    cmd.assert()
+        .failure()
+        .stdout(predicates::str::contains("mismatched types"))
+        .stderr(predicates::str::contains(
+            "Rust compile failed with translated diagnostics.",
+        ));
+}

@@ -44,6 +44,14 @@ enum Commands {
         /// Input .ds file
         input: PathBuf,
     },
+    /// Compile and run a .ds file or project
+    Run {
+        /// Input .ds file or project directory
+        input: PathBuf,
+        /// Arguments passed through to the program (`desert run app.ds -- arg1 arg2`)
+        #[arg(last = true)]
+        args: Vec<String>,
+    },
     /// Print resolved import graph order for a project
     Graph {
         /// Project directory containing desert.toml/Desert.toml
@@ -68,34 +76,9 @@ fn main() -> anyhow::Result<()> {
             let input_source = load_input_source(&input)?;
             let (rust_code, source_map) = transpile_file(&input_source)?;
 
-            let temp_dir = unique_temp_dir();
-            fs::create_dir_all(&temp_dir)?;
-            let rs_file = temp_dir.join("main.rs");
-            fs::write(&rs_file, rust_code)?;
+            let output = run_rustc_check(&rust_code)?;
+            let saw_diagnostic = emit_translated_diagnostics(&output, &source_map)?;
 
-            // Just use rustc for simple checks without a full cargo project
-            let output = std::process::Command::new("rustc")
-                .arg("--edition=2024")
-                .arg("--error-format=json")
-                .arg("--emit=metadata")
-                .arg("--out-dir")
-                .arg(&temp_dir)
-                .arg(&rs_file)
-                .output()?;
-
-            let stderr = String::from_utf8(output.stderr)?;
-            let mut saw_diagnostic = false;
-            for line in stderr.lines() {
-                if let Ok(msg) = serde_json::from_str::<crate::mirage::Diagnostic>(line) {
-                    let translated = crate::mirage::Mirage::translate_error(&msg, &source_map);
-                    println!("{}", translated);
-                    saw_diagnostic = true;
-                } else if !line.trim().is_empty() {
-                    eprintln!("{}", line);
-                }
-            }
-
-            let _ = fs::remove_dir_all(&temp_dir);
             if !output.status.success() {
                 if !saw_diagnostic {
                     anyhow::bail!("Rust check failed.");
@@ -104,6 +87,43 @@ fn main() -> anyhow::Result<()> {
             }
 
             println!("Check passed.");
+        }
+        Commands::Run { input, args } => {
+            let input_source = load_input_source(&input)?;
+            let (rust_code, source_map) = transpile_file(&input_source)?;
+
+            with_temp_dir(|temp_dir| {
+                let rs_file = temp_dir.join("main.rs");
+                let binary_file = compiled_binary_path(temp_dir);
+                fs::write(&rs_file, &rust_code)?;
+
+                let output = std::process::Command::new("rustc")
+                    .arg("--edition=2024")
+                    .arg("--error-format=json")
+                    .arg("-o")
+                    .arg(&binary_file)
+                    .arg(&rs_file)
+                    .output()?;
+
+                let saw_diagnostic = emit_translated_diagnostics(&output, &source_map)?;
+                if !output.status.success() {
+                    if !saw_diagnostic {
+                        anyhow::bail!("Rust compile failed.");
+                    }
+                    anyhow::bail!("Rust compile failed with translated diagnostics.");
+                }
+
+                let status = std::process::Command::new(&binary_file)
+                    .args(&args)
+                    .status()?;
+                if !status.success() {
+                    match status.code() {
+                        Some(code) => anyhow::bail!("Program exited with status code {}", code),
+                        None => anyhow::bail!("Program terminated by signal"),
+                    }
+                }
+                Ok(())
+            })?;
         }
         Commands::Graph { input } => {
             let (project_root, ordered_files) = resolve_project_graph(&input)?;
@@ -394,6 +414,56 @@ fn unique_temp_dir() -> PathBuf {
         .map(|d| d.as_nanos())
         .unwrap_or(0);
     std::env::temp_dir().join(format!("desert_check_{}_{}", std::process::id(), nanos))
+}
+
+fn with_temp_dir<T>(f: impl FnOnce(&Path) -> anyhow::Result<T>) -> anyhow::Result<T> {
+    let temp_dir = unique_temp_dir();
+    fs::create_dir_all(&temp_dir)?;
+    let result = f(&temp_dir);
+    let _ = fs::remove_dir_all(&temp_dir);
+    result
+}
+
+fn compiled_binary_path(temp_dir: &Path) -> PathBuf {
+    if cfg!(windows) {
+        temp_dir.join("desert_program.exe")
+    } else {
+        temp_dir.join("desert_program")
+    }
+}
+
+fn run_rustc_check(rust_code: &str) -> anyhow::Result<std::process::Output> {
+    with_temp_dir(|temp_dir| {
+        let rs_file = temp_dir.join("main.rs");
+        fs::write(&rs_file, rust_code)?;
+        let output = std::process::Command::new("rustc")
+            .arg("--edition=2024")
+            .arg("--error-format=json")
+            .arg("--emit=metadata")
+            .arg("--out-dir")
+            .arg(temp_dir)
+            .arg(&rs_file)
+            .output()?;
+        Ok(output)
+    })
+}
+
+fn emit_translated_diagnostics(
+    output: &std::process::Output,
+    source_map: &crate::sourcemap::SourceMap,
+) -> anyhow::Result<bool> {
+    let stderr = String::from_utf8(output.stderr.clone())?;
+    let mut saw_diagnostic = false;
+    for line in stderr.lines() {
+        if let Ok(msg) = serde_json::from_str::<crate::mirage::Diagnostic>(line) {
+            let translated = crate::mirage::Mirage::translate_error(&msg, source_map);
+            println!("{}", translated);
+            saw_diagnostic = true;
+        } else if !line.trim().is_empty() {
+            eprintln!("{}", line);
+        }
+    }
+    Ok(saw_diagnostic)
 }
 
 fn line_col_from_offset(source: &str, offset: usize) -> (usize, usize) {

@@ -20,8 +20,7 @@ Core quality checks currently pass:
 - `src/resolver.rs`: Lightweight scoped type/value symbol tracker for unified-dot lowering.
 - `src/sourcemap.rs`: Rust-to-Desert mapping with source file + line locations.
 - `src/mirage.rs`: Rust diagnostic translation to Desert terminology.
-- `src/main.rs`: CLI entry point (`transpile`, `check`) and diagnostics plumbing.
-- `src/main.rs`: CLI entry point (`transpile`, `check`, `graph`) and diagnostics plumbing.
+- `src/main.rs`: CLI entry point (`transpile`, `check`, `run`, `graph`) and diagnostics plumbing.
 
 ## Implemented Language Surface
 
@@ -36,16 +35,18 @@ Core quality checks currently pass:
 
 ## Implemented Project Surface
 
-- CLI now accepts either a single `.ds` file or a project directory for `transpile`/`check`.
+- CLI now accepts either a single `.ds` file or a project directory for `transpile`/`check`/`run`.
 - Project directories require `desert.toml` or `Desert.toml`.
 - Entrypoint resolution uses `[package].entry` when provided, defaulting to `src/main.ds`.
 - Project mode resolves top-level imports recursively (relative to importing file), defaults missing import extensions to `.ds`, and rejects import cycles.
 - `desert graph <project_dir>` prints the resolved import/topological load order used for compilation.
+- `desert run <input>` now compiles and executes file/project programs directly, with optional passthrough args after `--`.
 
 ## Recent Cleanup
 
 - Improved CLI diagnostics with line/column parser/lexer errors.
 - `check` now uses unique temp directories, `rustc --emit=metadata`, and isolated rustc outputs in temp dirs.
+- Added a `run` command that compiles to temp executables, translates rustc compile diagnostics through Mirage, and then executes.
 - Cleaned parser generic-call flow and pyimport token rendering.
 - Simplified transpiler internals and removed placeholder block output path.
 - Added `Default` implementations and resolved Clippy warnings.

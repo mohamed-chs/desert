@@ -37,13 +37,17 @@ The design priority is explicit semantics with predictable lowering. Syntax that
 
 - `desert transpile <file.ds> [-o file.rs]`
 - `desert check <file.ds>`
+- `desert run <file.ds> [-- args...]`
 - `desert transpile <project_dir>` with `desert.toml`/`Desert.toml` (`[package].entry`, default `src/main.ds`)
 - `desert check <project_dir>` with the same project entry resolution
+- `desert run <project_dir> [-- args...]` with the same project entry resolution
 - `desert graph <project_dir>` to print resolved import load order
 
 Project mode resolves top-level `import` statements recursively, loads imported files before importers, and rejects import cycles.
 
 `check` transpiles to Rust, runs `rustc --emit=metadata --error-format=json`, and maps diagnostics back to Desert source file+line locations.
+
+`run` transpiles and compiles to a temp executable, reports translated compile diagnostics on failure, and executes the program directly.
 
 ## Current Limits
 
