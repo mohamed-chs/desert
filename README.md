@@ -29,6 +29,7 @@ cargo build --release
 - **Run**: `desert run input.ds`
 - **Run Project**: `desert run path/to/project`
 - **Run With Args**: `desert run input.ds -- arg1 arg2`
+- **New Project**: `desert new my_app`
 - **Graph**: `desert graph path/to/project` (prints resolved import order)
 
 Project source files can import other files using `import "relative/path.ds"` or dotted paths like `import util.math` (resolved relative to the importing file, `.ds` extension implied).

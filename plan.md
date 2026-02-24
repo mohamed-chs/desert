@@ -16,6 +16,7 @@ This roadmap follows current project direction: prioritize project workflow and 
 - Accept project directories in CLI (`desert.toml`/`Desert.toml`) and resolve an explicit entrypoint. (Done)
 - Implement first-pass module/import graph loader with cycle detection. (Done)
 - Add direct execution workflow (`desert run <file|project> [-- args...]`). (Done)
+- Add zero-config project scaffolding (`desert new <path>`). (Done)
 - Keep transpilation predictable and readable while introducing cross-file compilation order.
 - Preserve current lowering conventions while scaling from single-file to project mode.
 

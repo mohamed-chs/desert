@@ -1,4 +1,7 @@
 use assert_cmd::cargo::cargo_bin_cmd;
+use std::fs;
+use std::path::PathBuf;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 fn run_check(example: &str) {
     let mut cmd = cargo_bin_cmd!("desert");
@@ -340,4 +343,48 @@ fn run_reports_translated_diagnostics_for_compile_failure() {
         .stderr(predicates::str::contains(
             "Rust compile failed with translated diagnostics.",
         ));
+}
+
+fn unique_temp_path(prefix: &str) -> PathBuf {
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    std::env::temp_dir().join(format!("{prefix}_{}_{}", std::process::id(), nanos))
+}
+
+#[test]
+fn new_scaffolds_project_that_checks() {
+    let project_dir = unique_temp_path("desert_new_project");
+    let mut cmd = cargo_bin_cmd!("desert");
+    cmd.arg("new").arg(&project_dir);
+    cmd.assert()
+        .success()
+        .stdout(predicates::str::contains("Created Desert project"));
+
+    let manifest = fs::read_to_string(project_dir.join("desert.toml")).unwrap();
+    assert!(manifest.contains("entry = \"src/main.ds\""));
+    let main_source = fs::read_to_string(project_dir.join("src/main.ds")).unwrap();
+    assert!(main_source.contains("def main():"));
+
+    let mut check_cmd = cargo_bin_cmd!("desert");
+    check_cmd.arg("check").arg(&project_dir);
+    check_cmd.assert().success();
+
+    let _ = fs::remove_dir_all(&project_dir);
+}
+
+#[test]
+fn new_rejects_non_empty_directory_without_force() {
+    let project_dir = unique_temp_path("desert_new_nonempty");
+    fs::create_dir_all(&project_dir).unwrap();
+    fs::write(project_dir.join("existing.txt"), "keep").unwrap();
+
+    let mut cmd = cargo_bin_cmd!("desert");
+    cmd.arg("new").arg(&project_dir);
+    cmd.assert()
+        .failure()
+        .stderr(predicates::str::contains("is not empty"));
+
+    let _ = fs::remove_dir_all(&project_dir);
 }

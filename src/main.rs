@@ -52,6 +52,14 @@ enum Commands {
         #[arg(last = true)]
         args: Vec<String>,
     },
+    /// Create a new Desert project scaffold
+    New {
+        /// Path to create (project name if relative)
+        path: PathBuf,
+        /// Allow scaffolding into an existing non-empty directory
+        #[arg(long)]
+        force: bool,
+    },
     /// Print resolved import graph order for a project
     Graph {
         /// Project directory containing desert.toml/Desert.toml
@@ -131,6 +139,13 @@ fn main() -> anyhow::Result<()> {
                 let display_path = file.strip_prefix(&project_root).unwrap_or(file.as_path());
                 println!("{}", display_path.display());
             }
+        }
+        Commands::New { path, force } => {
+            scaffold_project(&path, force)?;
+            println!("Created Desert project at {}", path.display());
+            println!("Next steps:");
+            println!("  cd {}", path.display());
+            println!("  desert run .");
         }
     }
 
@@ -414,6 +429,43 @@ fn unique_temp_dir() -> PathBuf {
         .map(|d| d.as_nanos())
         .unwrap_or(0);
     std::env::temp_dir().join(format!("desert_check_{}_{}", std::process::id(), nanos))
+}
+
+fn scaffold_project(path: &Path, force: bool) -> anyhow::Result<()> {
+    if path.exists() {
+        if !path.is_dir() {
+            anyhow::bail!("target '{}' exists and is not a directory", path.display());
+        }
+        if !force && path.read_dir()?.next().is_some() {
+            anyhow::bail!(
+                "target directory '{}' is not empty (use --force to overwrite files)",
+                path.display()
+            );
+        }
+    } else {
+        fs::create_dir_all(path)?;
+    }
+
+    let src_dir = path.join("src");
+    fs::create_dir_all(&src_dir)?;
+
+    let project_name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .filter(|name| !name.is_empty())
+        .unwrap_or("desert_app")
+        .replace('-', "_");
+
+    let manifest = format!(
+        "[package]\nname = \"{}\"\nentry = \"src/main.ds\"\n",
+        project_name
+    );
+    fs::write(path.join("desert.toml"), manifest)?;
+    fs::write(
+        src_dir.join("main.ds"),
+        "def main():\n    $print(\"Hello from Desert!\")\n",
+    )?;
+    Ok(())
 }
 
 fn with_temp_dir<T>(f: impl FnOnce(&Path) -> anyhow::Result<T>) -> anyhow::Result<T> {
