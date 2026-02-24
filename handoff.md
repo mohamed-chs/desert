@@ -43,6 +43,7 @@ Core quality checks currently pass:
 - Added `desert check` integration coverage for all examples in `tests/check_examples.rs`.
 - Added negative `desert check` integration fixtures to assert translated rustc diagnostics for type mismatch, mutability borrow errors, and method-resolution failures, plus parser/lexer location errors.
 - Added explicit Mirage hints keyed by rustc error codes (`E0308`, `E0596`, `E0599`) with unit tests.
+- Replaced resolver capitalization heuristics with scoped symbol tracking for unified-dot lowering, including shadowing-aware behavior.
 
 ## Known Gaps
 
@@ -55,6 +56,6 @@ Core quality checks currently pass:
 ## Recommended Next Steps
 
 1. Expand integration checks with more negative/failure-path fixtures (expected diagnostics), especially protocol/trait bound and lifetime-oriented failures.
-2. Introduce a richer resolver pass with scoped symbols.
+2. Extend resolver beyond dot-receiver classification into broader semantic checks (symbol/type validation before Rust emit).
 3. Expand Mirage translation with more targeted hints (beyond current `E0308`/`E0596`/`E0599` coverage).
 4. Evolve `pyimport` from comment passthrough to concrete interop scaffolding.

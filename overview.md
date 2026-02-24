@@ -23,6 +23,7 @@ The goal is straightforward: keep Rust's performance and ownership model, but ma
 - Unified dot resolution:
   - `Type.new()` -> `Type::new()`
   - `value.method()` -> `value.method()`
+  - Resolution now respects lexical shadowing (a local value named `Type` is treated as a value, not a static receiver)
 
 ## CLI
 
@@ -37,6 +38,7 @@ This is still an experimental compiler frontend. A few important constraints:
 
 - No package/project system yet (single-file workflow).
 - Type and name resolution are intentionally simple.
+- Resolver currently provides scoped symbol tracking for unified-dot classification, but is not yet a full semantic/type checker.
 - `pyimport` blocks are preserved as structured comments in Rust output.
 - Source maps are line-based (not full byte-accurate remapping).
 - Matmul lowering is currently specialized to float vector/matrix shapes.

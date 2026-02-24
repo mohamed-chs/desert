@@ -6,12 +6,15 @@
 - Backward compatibility is optional by default; breaking changes are acceptable when they simplify semantics or reduce compiler complexity.
 - Prefer predictable transpilation over clever syntax tricks.
 - Keep generated Rust readable; it is still the debugging escape hatch.
+- Prioritize shipping compiler behavior changes over coverage/docs churn; tests and docs are support work, not the main deliverable.
 
 ## Iteration Workflow
 
 - Work in small green steps: change -> test -> commit.
 - Keep commits atomic: one logical concern per commit (behavior, tests, docs, examples split when practical).
 - Make frequent commits during active implementation, not only at the end.
+- On `continue`/forward-progress requests, implement at least one concrete compiler/language behavior change before expanding tests/docs, unless the user explicitly requests tests/docs-only work.
+- If a turn ends without behavior change, call that out explicitly and ask whether to proceed with a behavior-focused change next.
 
 ## Validation Gates
 
@@ -43,7 +46,7 @@
 - Keep `overview.md` focused on current behavior, not aspirational features.
 - Keep `handoff.md` operational: architecture, status, risks, next tasks.
 - Keep `plan.md` aligned with what is done vs pending.
-- When behavior changes, update examples and docs in the same pass.
+- When behavior changes, update examples/docs in the same pass, but keep those edits minimal and proportional to the shipped behavior.
 - Do not leave temp or compiler artifacts in repo root before finishing.
 
 ## External Reference Rule

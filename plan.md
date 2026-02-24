@@ -39,3 +39,4 @@ This roadmap focuses on shipping a stable core before expanding syntax.
 - Keep feature work test-first where possible.
 - Avoid broad syntax expansion until diagnostics and resolution are reliable.
 - Update docs/examples with each behavior change so drift stays low.
+- In normal forward-progress turns, ship behavior first; avoid test/docs-only iterations unless explicitly requested.
