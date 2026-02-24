@@ -91,3 +91,35 @@ fn check_reports_lexer_errors_with_location() {
         .stderr(predicates::str::contains("Lexing error at line 2, column 15"))
         .stderr(predicates::str::contains("near '^'"));
 }
+
+#[test]
+fn check_reports_move_mutability_failure_with_desert_line_mapping() {
+    let mut cmd = cargo_bin_cmd!("desert");
+    cmd.arg("check")
+        .arg("tests/fixtures/check_fail_move_requires_mut.ds");
+    cmd.assert()
+        .failure()
+        .stdout(predicates::str::contains(
+            "cannot borrow `xs` as mutable, as it is not declared as mutable",
+        ))
+        .stdout(predicates::str::contains("Line 3: in Desert source"))
+        .stderr(predicates::str::contains(
+            "Rust check failed with translated diagnostics.",
+        ));
+}
+
+#[test]
+fn check_reports_method_resolution_failure_with_desert_line_mapping() {
+    let mut cmd = cargo_bin_cmd!("desert");
+    cmd.arg("check")
+        .arg("tests/fixtures/check_fail_method_not_found.ds");
+    cmd.assert()
+        .failure()
+        .stdout(predicates::str::contains(
+            "no method named `nope` found for type `i32`",
+        ))
+        .stdout(predicates::str::contains("Line 3: in Desert source"))
+        .stderr(predicates::str::contains(
+            "Rust check failed with translated diagnostics.",
+        ));
+}
