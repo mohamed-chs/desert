@@ -1,0 +1,3 @@
+[package]
+name = "project_custom_entry"
+entry = "app/entry.ds"

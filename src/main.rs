@@ -14,10 +14,11 @@ type ParserError<'a> = NomErr<NomError<&'a [crate::parser::TokenSpan]>>;
 use clap::Parser;
 use nom::Err as NomErr;
 use nom::error::Error as NomError;
+use serde::Deserialize;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Parser)]
@@ -49,7 +50,7 @@ fn main() -> anyhow::Result<()> {
 
     match cli.command {
         Commands::Transpile { input, output } => {
-            let input_content = fs::read_to_string(&input)?;
+            let input_content = load_input_source(&input)?;
             let (rust_code, _) = transpile_file(&input_content)?;
             if let Some(output_path) = output {
                 fs::write(output_path, rust_code)?;
@@ -58,7 +59,7 @@ fn main() -> anyhow::Result<()> {
             }
         }
         Commands::Check { input } => {
-            let input_content = fs::read_to_string(&input)?;
+            let input_content = load_input_source(&input)?;
             let (rust_code, source_map) = transpile_file(&input_content)?;
 
             let temp_dir = unique_temp_dir();
@@ -103,7 +104,194 @@ fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
+#[derive(Debug, Deserialize, Default)]
+struct DesertManifest {
+    package: Option<ManifestPackage>,
+}
+
+#[derive(Debug, Deserialize, Default)]
+struct ManifestPackage {
+    entry: Option<PathBuf>,
+}
+
+fn load_input_source(input: &Path) -> anyhow::Result<String> {
+    if input.is_file() {
+        return fs::read_to_string(input).map_err(Into::into);
+    }
+    if input.is_dir() {
+        return load_project_source(input);
+    }
+
+    anyhow::bail!(
+        "input path '{}' is neither a file nor a directory",
+        input.display()
+    )
+}
+
+fn resolve_project_entry(project_root: &Path) -> anyhow::Result<PathBuf> {
+    let manifest_path = ["desert.toml", "Desert.toml"]
+        .iter()
+        .map(|name| project_root.join(name))
+        .find(|path| path.is_file())
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "project input '{}' is missing desert.toml or Desert.toml",
+                project_root.display()
+            )
+        })?;
+
+    let manifest_content = fs::read_to_string(&manifest_path)?;
+    let manifest: DesertManifest = toml::from_str(&manifest_content)
+        .map_err(|err| anyhow::anyhow!("failed to parse '{}': {}", manifest_path.display(), err))?;
+
+    let entry_rel = manifest
+        .package
+        .and_then(|pkg| pkg.entry)
+        .unwrap_or_else(|| PathBuf::from("src/main.ds"));
+
+    let entry_path = project_root.join(entry_rel);
+    if entry_path.is_file() {
+        Ok(entry_path)
+    } else {
+        anyhow::bail!(
+            "project entry '{}' does not exist as a file",
+            entry_path.display()
+        )
+    }
+}
+
+fn load_project_source(project_root: &Path) -> anyhow::Result<String> {
+    let canonical_root = project_root.canonicalize().map_err(|err| {
+        anyhow::anyhow!(
+            "failed to resolve project root '{}': {}",
+            project_root.display(),
+            err
+        )
+    })?;
+
+    let entry_path = resolve_project_entry(&canonical_root)?;
+    let mut visited = HashSet::new();
+    let mut loading = Vec::new();
+    let mut ordered_sources = Vec::new();
+
+    collect_project_sources(
+        &entry_path,
+        &canonical_root,
+        &mut visited,
+        &mut loading,
+        &mut ordered_sources,
+    )?;
+
+    Ok(ordered_sources.join("\n\n"))
+}
+
+fn collect_project_sources(
+    file_path: &Path,
+    project_root: &Path,
+    visited: &mut HashSet<PathBuf>,
+    loading: &mut Vec<PathBuf>,
+    ordered_sources: &mut Vec<String>,
+) -> anyhow::Result<()> {
+    let canonical_file = file_path.canonicalize().map_err(|err| {
+        anyhow::anyhow!(
+            "failed to resolve import '{}': {}",
+            file_path.display(),
+            err
+        )
+    })?;
+
+    if !canonical_file.starts_with(project_root) {
+        anyhow::bail!(
+            "import '{}' resolves outside project root '{}'",
+            canonical_file.display(),
+            project_root.display()
+        );
+    }
+
+    if visited.contains(&canonical_file) {
+        return Ok(());
+    }
+
+    if let Some(cycle_idx) = loading.iter().position(|path| path == &canonical_file) {
+        let mut cycle = loading[cycle_idx..]
+            .iter()
+            .map(|path| path.display().to_string())
+            .collect::<Vec<_>>();
+        cycle.push(canonical_file.display().to_string());
+        anyhow::bail!("import cycle detected: {}", cycle.join(" -> "));
+    }
+
+    let source = fs::read_to_string(&canonical_file)?;
+    loading.push(canonical_file.clone());
+    let program = parse_source(&source)?;
+
+    for stmt in &program.statements {
+        if let crate::ast::StatementKind::Import(path) = &stmt.kind {
+            let import_path = resolve_import_path(&canonical_file, path, project_root)?;
+            collect_project_sources(
+                &import_path,
+                project_root,
+                visited,
+                loading,
+                ordered_sources,
+            )?;
+        }
+    }
+
+    loading.pop();
+    visited.insert(canonical_file);
+    ordered_sources.push(source);
+    Ok(())
+}
+
+fn resolve_import_path(
+    current_file: &Path,
+    import_path: &str,
+    project_root: &Path,
+) -> anyhow::Result<PathBuf> {
+    let mut resolved = PathBuf::from(import_path);
+    if resolved.extension().is_none() {
+        resolved.set_extension("ds");
+    }
+
+    let joined = if resolved.is_absolute() {
+        resolved
+    } else {
+        current_file
+            .parent()
+            .unwrap_or_else(|| Path::new("."))
+            .join(resolved)
+    };
+
+    let canonical = joined.canonicalize().map_err(|err| {
+        anyhow::anyhow!(
+            "failed to resolve import '{}' from '{}': {}",
+            import_path,
+            current_file.display(),
+            err
+        )
+    })?;
+
+    if !canonical.starts_with(project_root) {
+        anyhow::bail!(
+            "import '{}' from '{}' resolves outside project root '{}': '{}'",
+            import_path,
+            current_file.display(),
+            project_root.display(),
+            canonical.display()
+        );
+    }
+    Ok(canonical)
+}
+
 fn transpile_file(input_content: &str) -> anyhow::Result<(String, crate::sourcemap::SourceMap)> {
+    let program = parse_source(input_content)?;
+    validate_program(input_content, &program)?;
+    let transpiler = Transpiler::new();
+    Ok(transpiler.transpile(&program, input_content))
+}
+
+fn parse_source(input_content: &str) -> anyhow::Result<crate::ast::Program> {
     let mut tokens = Vec::new();
     let mut lexer = Lexer::new(input_content);
     while let Some(result) = lexer.next() {
@@ -126,9 +314,7 @@ fn transpile_file(input_content: &str) -> anyhow::Result<(String, crate::sourcem
         }
     }
     let (_, program) = parse_program(&tokens).map_err(|e| format_parse_error(input_content, e))?;
-    validate_program(input_content, &program)?;
-    let transpiler = Transpiler::new();
-    Ok(transpiler.transpile(&program, input_content))
+    Ok(program)
 }
 
 fn unique_temp_dir() -> PathBuf {
@@ -292,6 +478,7 @@ fn validate_statements(
                 validate_statements(methods, scopes, struct_names)?;
             }
             StatementKind::Struct { .. }
+            | StatementKind::Import(_)
             | StatementKind::PyImport(_)
             | StatementKind::Return(None) => {}
         }

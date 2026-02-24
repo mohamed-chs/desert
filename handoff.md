@@ -28,9 +28,17 @@ Core quality checks currently pass:
 - Control flow: `if/else`, `for`, `match`
 - Definitions: `def`, `struct`, `protocol`, `impl`
 - Expressions: literals, calls, member access, generic calls, indexing, assignment
+- Imports: top-level `import` statements for project files
 - Ownership/error syntax: `move`, `&`, `~`, `?`, `!!`
 - Macros: `$name(...)` with `$print` -> `println!`
 - `pyimport` blocks: parsed and emitted as Rust comments
+
+## Implemented Project Surface
+
+- CLI now accepts either a single `.ds` file or a project directory for `transpile`/`check`.
+- Project directories require `desert.toml` or `Desert.toml`.
+- Entrypoint resolution uses `[package].entry` when provided, defaulting to `src/main.ds`.
+- Project mode resolves top-level imports recursively (relative to importing file), defaults missing import extensions to `.ds`, and rejects import cycles.
 
 ## Recent Cleanup
 
@@ -50,10 +58,13 @@ Core quality checks currently pass:
 - Added pre-Rust semantic validation for mutability-sensitive forms so `move x` and `~x` fail fast with Desert line/column errors when `x` is not declared `mut`, and now also reject non-place operands such as `move foo()` or `~foo()`.
 - Added pre-Rust assignment validation so `lhs = rhs` now fails early unless `lhs` is a place expression, the root binding exists, and write access is valid (`mut` root or unique-reference write-through for member/index assignment). Struct constructor named arguments (`Type(field=value)`) are handled explicitly as constructor syntax, not assignment.
 - Removed statement-level borrow declarations (`ref`, `mut ref`) from AST/parser/transpiler. Borrow binding is now expression-only (`let a = &x`, `let b = ~x`), and `ref` is no longer a reserved keyword.
+- Added `import` parsing and project graph loading so multi-file projects compile from a single entrypoint.
 
 ## Known Gaps
 
 - No project-level dependency management yet.
+- No package/dependency management yet beyond local file imports.
+- Project diagnostics are still line-based and do not yet report per-file spans for combined imports.
 - Resolver is heuristic, not semantic.
 - Mirage translations are simple string rewrites.
 - Source map is line-based only.
@@ -61,7 +72,7 @@ Core quality checks currently pass:
 
 ## Recommended Next Steps
 
-1. Continue syntax pruning where two forms map to one Rust lowering path.
-2. Extend semantic validation to catch more failures before `rustc`.
-3. Expand Mirage hints with ownership/lifetime-oriented guidance.
-4. Convert `pyimport` into executable interop scaffolding.
+1. Add first-class file-aware source mapping for project imports (file + line + column diagnostics).
+2. Add basic tooling primitives first (formatter scaffold, project graph check command, incremental cache keying).
+3. Expand Mirage hints with ownership/lifetime-oriented guidance as diagnostics layer work.
+4. Convert `pyimport` into executable interop scaffolding later.

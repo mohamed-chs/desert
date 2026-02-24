@@ -1,0 +1,4 @@
+import "main.ds"
+
+def f():
+    return 1

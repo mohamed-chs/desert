@@ -315,6 +315,7 @@ impl Transpiler {
                     source_map.add_mapping(*current_line, ds_line);
                     *current_line += 3;
                 }
+                StatementKind::Import(_) => {}
                 StatementKind::Match { expression, arms } => {
                     let ds_line = source[..stmt.span.start].lines().count().saturating_sub(1);
                     let header = format!(
@@ -425,6 +426,7 @@ impl Transpiler {
             StatementKind::PyImport(content) => {
                 format!("{}/* Desert PyImport block: {} */\n", indent_str, content)
             }
+            StatementKind::Import(_) => String::new(),
             StatementKind::Match { expression, arms } => {
                 let mut output = format!(
                     "{}match {} {{\n",
@@ -865,6 +867,7 @@ impl Transpiler {
                 self.expression_uses_matmul(expr)
             }
             StatementKind::Struct { .. }
+            | StatementKind::Import(_)
             | StatementKind::PyImport(_)
             | StatementKind::Return(None) => false,
         }

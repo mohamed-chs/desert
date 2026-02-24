@@ -171,3 +171,54 @@ fn check_reports_method_resolution_failure_with_desert_line_mapping() {
             "Rust check failed with translated diagnostics.",
         ));
 }
+
+#[test]
+fn check_project_directory_with_default_entry() {
+    let mut cmd = cargo_bin_cmd!("desert");
+    cmd.arg("check").arg("tests/fixtures/project_ok");
+    cmd.assert().success();
+}
+
+#[test]
+fn check_project_directory_with_custom_entry() {
+    let mut cmd = cargo_bin_cmd!("desert");
+    cmd.arg("check").arg("tests/fixtures/project_custom_entry");
+    cmd.assert().success();
+}
+
+#[test]
+fn transpile_project_directory_with_default_entry() {
+    let mut cmd = cargo_bin_cmd!("desert");
+    cmd.arg("transpile").arg("tests/fixtures/project_ok");
+    cmd.assert().success().stdout(predicates::str::contains(
+        "println!(\"{}\", \"project ok\".to_string())",
+    ));
+}
+
+#[test]
+fn check_project_directory_with_import_graph() {
+    let mut cmd = cargo_bin_cmd!("desert");
+    cmd.arg("check").arg("tests/fixtures/project_import_graph");
+    cmd.assert().success();
+}
+
+#[test]
+fn transpile_project_directory_with_import_graph() {
+    let mut cmd = cargo_bin_cmd!("desert");
+    cmd.arg("transpile")
+        .arg("tests/fixtures/project_import_graph");
+    cmd.assert()
+        .success()
+        .stdout(predicates::str::contains("fn plus("))
+        .stdout(predicates::str::contains("fn add("))
+        .stdout(predicates::str::contains("fn main("));
+}
+
+#[test]
+fn check_project_directory_reports_import_cycle() {
+    let mut cmd = cargo_bin_cmd!("desert");
+    cmd.arg("check").arg("tests/fixtures/project_import_cycle");
+    cmd.assert()
+        .failure()
+        .stderr(predicates::str::contains("import cycle detected:"));
+}

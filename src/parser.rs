@@ -382,6 +382,24 @@ fn mut_statement(input: &[TokenSpan]) -> ParseResult<'_, StatementKind> {
     Ok((input, StatementKind::Mut { name, ty, value }))
 }
 
+fn import_statement(input: &[TokenSpan]) -> ParseResult<'_, StatementKind> {
+    let (input, _) = token(Token::Import)(input)?;
+
+    if let Some(((Token::String(path), _), rest)) = input.split_first() {
+        return Ok((rest, StatementKind::Import(path.clone())));
+    }
+
+    let (mut current_input, first) = ident(input)?;
+    let mut parts = vec![first];
+    while let Ok((next_input, _)) = token(Token::Dot)(current_input) {
+        let (next_input, part) = ident(next_input)?;
+        parts.push(part);
+        current_input = next_input;
+    }
+
+    Ok((current_input, StatementKind::Import(parts.join("/"))))
+}
+
 fn block(input: &[TokenSpan]) -> ParseResult<'_, Vec<Statement>> {
     let (input, _) = token(Token::Indent)(input)?;
     let mut statements = Vec::new();
@@ -694,6 +712,8 @@ fn statement(input: &[TokenSpan]) -> ParseResult<'_, Statement> {
         (rest, kind)
     } else if let Ok((rest, kind)) = mut_statement(input) {
         (rest, kind)
+    } else if let Ok((rest, kind)) = import_statement(input) {
+        (rest, kind)
     } else if let Ok((rest, kind)) = def_statement(input) {
         (rest, kind)
     } else if let Ok((rest, kind)) = return_statement(input) {
@@ -857,6 +877,32 @@ mod tests {
                 assert!(else_block.is_some());
             }
             _ => panic!("Expected If statement"),
+        }
+    }
+
+    #[test]
+    fn test_parse_import_string_path() {
+        let input = "import \"utils/math.ds\"";
+        let lexer = Lexer::new(input);
+        let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
+        let (_, program) = parse_program(&tokens).unwrap();
+
+        match &program.statements[0].kind {
+            StatementKind::Import(path) => assert_eq!(path, "utils/math.ds"),
+            _ => panic!("Expected Import statement"),
+        }
+    }
+
+    #[test]
+    fn test_parse_import_dotted_path() {
+        let input = "import utils.math";
+        let lexer = Lexer::new(input);
+        let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
+        let (_, program) = parse_program(&tokens).unwrap();
+
+        match &program.statements[0].kind {
+            StatementKind::Import(path) => assert_eq!(path, "utils/math"),
+            _ => panic!("Expected Import statement"),
         }
     }
 

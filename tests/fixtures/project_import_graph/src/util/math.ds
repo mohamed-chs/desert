@@ -1,0 +1,4 @@
+import ops
+
+def add(a: i32, b: i32) -> i32:
+    return plus(a, b)

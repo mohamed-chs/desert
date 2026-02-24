@@ -64,6 +64,7 @@ pub struct Statement {
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum StatementKind {
+    Import(String),
     Let {
         name: String,
         ty: Option<Type>,

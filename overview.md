@@ -7,6 +7,7 @@ The design priority is explicit semantics with predictable lowering. Syntax that
 ## Current Language Surface
 
 - Blocks: `if`, `for`, `def`, `struct`, `protocol`, `impl`, `match`
+- Imports: `import "relative/path.ds"` and `import dotted.module` (resolved relative to the importing file, `.ds` default extension)
 - Bindings: `let` and `mut`
 - Ownership and borrows:
   - `move place` lowers to `std::mem::take(&mut place)`
@@ -33,12 +34,16 @@ The design priority is explicit semantics with predictable lowering. Syntax that
 
 - `desert transpile <file.ds> [-o file.rs]`
 - `desert check <file.ds>`
+- `desert transpile <project_dir>` with `desert.toml`/`Desert.toml` (`[package].entry`, default `src/main.ds`)
+- `desert check <project_dir>` with the same project entry resolution
+
+Project mode resolves top-level `import` statements recursively, loads imported files before importers, and rejects import cycles.
 
 `check` transpiles to Rust, runs `rustc --emit=metadata --error-format=json`, and maps diagnostics back to Desert source lines.
 
 ## Current Limits
 
-- Single-file workflow only.
+- No per-file span diagnostics yet in project mode (imports compile as a combined source stream today).
 - Resolver is scoped symbol tracking, not full type inference.
 - `pyimport` is preserved as Rust comments.
 - Source map is line-based.

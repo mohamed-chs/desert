@@ -1,0 +1,4 @@
+import "a.ds"
+
+def main():
+    let x = f()

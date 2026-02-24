@@ -1,37 +1,42 @@
 # Desert Roadmap
 
-This roadmap assumes deliberate breaking changes when they reduce syntax overlap or compiler branching.
+This roadmap follows current project direction: prioritize project workflow and basic tooling first, defer runtime/domain specialization until the core developer loop is stable.
 
-## Phase 1: Semantic Core Simplification
+## Active Priorities
 
-- Keep one canonical binding path (`let`/`mut` only). (Done for borrow declarations: removed statement-level `ref`/`mut ref`)
-- Keep ownership operations expression-based (`move`, `&`, `~`) with explicit pre-emit validation.
-- Continue pruning overlapping forms that lower to identical Rust.
+1. Multi-file project workflow: Yes
+2. Full semantic/type system rewrite now: No
+3. Diagnostics productization: Maybe, staged
+4. Runtime/interop overhaul: Later
+5. Tooling: Yes, basics first
+6. Domain specialization: Later
 
-## Phase 2: Resolution and Type Semantics
+## Phase A: Project Workflow Foundation (Current)
 
-- Extend resolver from receiver classification into symbol/type validation.
-- Add explicit semantic checks for callable/member/index targets before Rust emit. (Partially done: assignment target semantics now checked pre-Rust, including constructor named-arg disambiguation.)
-- Keep precedence and lowering conventions explicit and test-backed.
+- Accept project directories in CLI (`desert.toml`/`Desert.toml`) and resolve an explicit entrypoint. (Done)
+- Implement first-pass module/import graph loader with cycle detection. (Done)
+- Keep transpilation predictable and readable while introducing cross-file compilation order.
+- Preserve current lowering conventions while scaling from single-file to project mode.
 
-## Phase 3: Diagnostics and Mirage
+## Phase B: Tooling Basics (Parallel to Phase A)
 
-- Expand rustc code-specific hints beyond `E0308`/`E0596`/`E0599`.
-- Improve source remapping precision from line-based toward span-aware mapping.
-- Emit direct “Desert-level” fix suggestions for common ownership/type failures.
+- Add formatter scaffold and stable style output.
+- Add project-graph check mode and cache-key groundwork for faster `check` loops.
+- Add CI-facing commands that separate syntax, semantic prechecks, and rustc-backed checking.
 
-## Phase 4: Interop and Runtime Surface
+## Phase C: Diagnostics Upgrade (Staged, Optional While A/B Run)
 
-- Replace `pyimport` comment passthrough with executable interop scaffolding.
-- Define a minimal `desert_core` surface aligned with current lowering rules.
-- Generalize `@` lowering beyond current float vector/matrix helper coverage.
+- Move from line-level mapping toward span-aware locations.
+- Expand Mirage coverage for common ownership/type rustc families.
+- Add explicit fix-style hints for recurring Desert authoring mistakes.
 
-## Phase 5: Tooling
+## Deferred Phases
 
-- Add formatting and style normalization.
-- Add language-server-grade parse/diagnostic services once semantics settle.
+- Runtime/interop system (`pyimport` replacement, `desert_core`) after project/tooling basics are stable.
+- Domain-focused language shaping after real project usage data exists.
 
 ## Delivery Notes
 
-- Behavior changes ship first; tests/docs track the shipped semantics in the same pass.
-- Backward compatibility is not a goal unless explicitly reintroduced.
+- Ship behavior changes first; tests/docs follow in the same pass.
+- Breaking changes remain acceptable when they reduce overlap or compiler branching.
+- Keep examples executable and checkable with current compiler behavior.
