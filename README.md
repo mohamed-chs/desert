@@ -47,7 +47,7 @@ cargo build --release
 - **Graph**: `desert graph path/to/project` (prints resolved import order)
 - **Graph Current Project**: `desert graph`
 
-Project source files can import other files using `import "relative/path.ds"` or dotted paths like `import util.math` (resolved relative to the importing file, `.ds` extension implied). Rust imports are also supported via `import rust.std.cmp.max` or `import "rust:std::cmp::max"` (currently `std`/`core`/`alloc` roots).
+Project source files can import other files using `import "relative/path.ds"` or dotted paths like `import util.math` (resolved relative to the importing file, `.ds` extension implied). Rust imports are also supported via `import rust.std.cmp.max`, `import rust.std.collections.HashMap as Map`, `from rust.std.cmp import max as maximum, min`, or `import "rust:std::cmp::max"` (currently `std`/`core`/`alloc` roots).
 
 ## Example
 

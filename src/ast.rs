@@ -63,8 +63,21 @@ pub struct Statement {
 }
 
 #[derive(Debug, PartialEq, Clone)]
+pub struct ImportItem {
+    pub name: String,
+    pub alias: Option<String>,
+}
+
+#[derive(Debug, PartialEq, Clone)]
 pub enum StatementKind {
-    Import(String),
+    Import {
+        path: String,
+        alias: Option<String>,
+    },
+    FromImport {
+        path: String,
+        items: Vec<ImportItem>,
+    },
     Let {
         name: String,
         ty: Option<Type>,

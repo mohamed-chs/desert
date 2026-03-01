@@ -440,12 +440,22 @@ fn collect_file_sources(
     let program = parse_source(&source)?;
 
     for stmt in &program.statements {
-        if let crate::ast::StatementKind::Import(path) = &stmt.kind {
-            if crate::imports::rust_use_from_import_path(path).is_some() {
-                continue;
+        match &stmt.kind {
+            crate::ast::StatementKind::Import { path, .. } => {
+                if crate::imports::rust_use_from_import_path(path).is_some() {
+                    continue;
+                }
+                let import_path = resolve_import_path(&canonical_file, path, None)?;
+                collect_file_sources(&import_path, visited, loading, ordered_files)?;
             }
-            let import_path = resolve_import_path(&canonical_file, path, None)?;
-            collect_file_sources(&import_path, visited, loading, ordered_files)?;
+            crate::ast::StatementKind::FromImport { path, .. } => {
+                if crate::imports::rust_use_from_import_path(path).is_some() {
+                    continue;
+                }
+                let import_path = resolve_import_path(&canonical_file, path, None)?;
+                collect_file_sources(&import_path, visited, loading, ordered_files)?;
+            }
+            _ => {}
         }
     }
 
@@ -489,12 +499,22 @@ fn collect_project_sources(
     let program = parse_source(&source)?;
 
     for stmt in &program.statements {
-        if let crate::ast::StatementKind::Import(path) = &stmt.kind {
-            if crate::imports::rust_use_from_import_path(path).is_some() {
-                continue;
+        match &stmt.kind {
+            crate::ast::StatementKind::Import { path, .. } => {
+                if crate::imports::rust_use_from_import_path(path).is_some() {
+                    continue;
+                }
+                let import_path = resolve_import_path(&canonical_file, path, Some(project_root))?;
+                collect_project_sources(&import_path, project_root, visited, loading, ordered_files)?;
             }
-            let import_path = resolve_import_path(&canonical_file, path, Some(project_root))?;
-            collect_project_sources(&import_path, project_root, visited, loading, ordered_files)?;
+            crate::ast::StatementKind::FromImport { path, .. } => {
+                if crate::imports::rust_use_from_import_path(path).is_some() {
+                    continue;
+                }
+                let import_path = resolve_import_path(&canonical_file, path, Some(project_root))?;
+                collect_project_sources(&import_path, project_root, visited, loading, ordered_files)?;
+            }
+            _ => {}
         }
     }
 
@@ -1244,11 +1264,30 @@ fn validate_statements(
                     false,
                 )?;
             }
-            StatementKind::Import(path) => {
+            StatementKind::Import { path, .. } => {
                 if nesting_depth > 0 {
                     return Err(SemanticError {
                         offset: stmt.span.start,
                         message: "`import` is only allowed at top level".to_string(),
+                    });
+                }
+                if let Some(use_path) = crate::imports::rust_use_from_import_path(path)
+                    && !crate::imports::is_supported_rust_root(&use_path)
+                {
+                    return Err(SemanticError {
+                        offset: stmt.span.start,
+                        message: format!(
+                            "unsupported rust import root `{}` (only std/core/alloc are supported)",
+                            use_path.split("::").next().unwrap_or(&use_path)
+                        ),
+                    });
+                }
+            }
+            StatementKind::FromImport { path, .. } => {
+                if nesting_depth > 0 {
+                    return Err(SemanticError {
+                        offset: stmt.span.start,
+                        message: "`from ... import ...` is only allowed at top level".to_string(),
                     });
                 }
                 if let Some(use_path) = crate::imports::rust_use_from_import_path(path)
@@ -1543,8 +1582,10 @@ fn predeclare_block_symbols(
                     },
                 );
             }
-            crate::ast::StatementKind::Import(path) => {
-                let Some(use_path) = crate::imports::rust_use_from_import_path(path) else {
+            crate::ast::StatementKind::Import { path, alias } => {
+                let Some(use_path) =
+                    crate::imports::rust_use_from_import(path, alias.as_deref())
+                else {
                     continue;
                 };
                 let Some(name) = crate::imports::rust_import_binding_name(&use_path) else {
@@ -1565,6 +1606,29 @@ fn predeclare_block_symbols(
                         callable_arity: None,
                     },
                 );
+            }
+            crate::ast::StatementKind::FromImport { path, items } => {
+                if crate::imports::rust_use_from_import_path(path).is_none() {
+                    continue;
+                }
+                for item in items {
+                    let name = item.alias.as_deref().unwrap_or(&item.name);
+                    if current_scope_contains(scopes, name) {
+                        return Err(SemanticError {
+                            offset: stmt.span.start,
+                            message: format!("duplicate local name `{}` in same scope", name),
+                        });
+                    }
+                    declare_binding(
+                        scopes,
+                        name,
+                        BindingInfo {
+                            is_mut: false,
+                            can_write_through: false,
+                            callable_arity: None,
+                        },
+                    );
+                }
             }
             _ => {}
         }

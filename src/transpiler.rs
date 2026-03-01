@@ -1,5 +1,5 @@
 use crate::ast::*;
-use crate::imports::rust_use_from_import_path;
+use crate::imports::{rust_use_from_from_import, rust_use_from_import};
 use crate::resolver::Resolver;
 use crate::sourcemap::{SourceLocation, SourceMap};
 use std::collections::HashMap;
@@ -376,7 +376,7 @@ impl Transpiler {
                     source_map.add_mapping(*current_line, stmt_location.clone());
                     *current_line += 3;
                 }
-                StatementKind::Import(_) => {}
+                StatementKind::Import { .. } | StatementKind::FromImport { .. } => {}
                 StatementKind::Match { expression, arms } => {
                     let header = format!(
                         "{}match {} {{\n",
@@ -487,7 +487,7 @@ impl Transpiler {
             StatementKind::PyImport(content) => {
                 format!("{}/* Desert PyImport block: {} */\n", indent_str, content)
             }
-            StatementKind::Import(_) => String::new(),
+            StatementKind::Import { .. } | StatementKind::FromImport { .. } => String::new(),
             StatementKind::Match { expression, arms } => {
                 let mut output = format!(
                     "{}match {} {{\n",
@@ -790,10 +790,18 @@ impl Transpiler {
     fn collect_rust_uses(&self, program: &Program) -> Vec<String> {
         let mut uses = HashSet::new();
         for stmt in &program.statements {
-            if let StatementKind::Import(path) = &stmt.kind
-                && let Some(use_path) = rust_use_from_import_path(path)
-            {
-                uses.insert(use_path);
+            match &stmt.kind {
+                StatementKind::Import { path, alias } => {
+                    if let Some(use_path) = rust_use_from_import(path, alias.as_deref()) {
+                        uses.insert(use_path);
+                    }
+                }
+                StatementKind::FromImport { path, items } => {
+                    if let Some(use_path) = rust_use_from_from_import(path, items) {
+                        uses.insert(use_path);
+                    }
+                }
+                _ => {}
             }
         }
         let mut ordered: Vec<String> = uses.into_iter().collect();
@@ -942,7 +950,8 @@ impl Transpiler {
                 self.expression_uses_matmul(expr)
             }
             StatementKind::Struct { .. }
-            | StatementKind::Import(_)
+            | StatementKind::Import { .. }
+            | StatementKind::FromImport { .. }
             | StatementKind::PyImport(_)
             | StatementKind::Return(None) => false,
         }
@@ -1376,6 +1385,28 @@ mod tests {
         let (rust_code, _) = transpile_program(&transpiler, &program, input);
         assert!(rust_code.contains("use std::cmp::max;"));
         assert!(rust_code.contains("let best = max(1, 2);"));
+    }
+
+    #[test]
+    fn test_transpile_rust_import_alias_emits_use_alias() {
+        let input = "import rust.std.collections.HashMap as Map";
+        let lexer = Lexer::new(input);
+        let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
+        let (_, program) = parse_program(&tokens).unwrap();
+        let transpiler = Transpiler::new();
+        let (rust_code, _) = transpile_program(&transpiler, &program, input);
+        assert!(rust_code.contains("use std::collections::HashMap as Map;"));
+    }
+
+    #[test]
+    fn test_transpile_rust_from_import_emits_grouped_use() {
+        let input = "from rust.std.cmp import max as maximum, min";
+        let lexer = Lexer::new(input);
+        let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
+        let (_, program) = parse_program(&tokens).unwrap();
+        let transpiler = Transpiler::new();
+        let (rust_code, _) = transpile_program(&transpiler, &program, input);
+        assert!(rust_code.contains("use std::cmp::{max as maximum, min};"));
     }
 
     #[test]

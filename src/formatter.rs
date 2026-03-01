@@ -11,8 +11,29 @@ pub fn format_program(program: &Program) -> String {
 fn format_statement(stmt: &Statement, indent: usize, out: &mut String) {
     let indent_str = "    ".repeat(indent);
     match &stmt.kind {
-        StatementKind::Import(path) => {
-            out.push_str(&format!("{}import \"{}\"\n", indent_str, path));
+        StatementKind::Import { path, alias } => {
+            if let Some(alias) = alias {
+                out.push_str(&format!(
+                    "{}import \"{}\" as {}\n",
+                    indent_str, path, alias
+                ));
+            } else {
+                out.push_str(&format!("{}import \"{}\"\n", indent_str, path));
+            }
+        }
+        StatementKind::FromImport { path, items } => {
+            let rendered_items = items
+                .iter()
+                .map(|item| match &item.alias {
+                    Some(alias) => format!("{} as {}", item.name, alias),
+                    None => item.name.clone(),
+                })
+                .collect::<Vec<_>>()
+                .join(", ");
+            out.push_str(&format!(
+                "{}from \"{}\" import {}\n",
+                indent_str, path, rendered_items
+            ));
         }
         StatementKind::Let { name, ty, value } => {
             out.push_str(&format!(

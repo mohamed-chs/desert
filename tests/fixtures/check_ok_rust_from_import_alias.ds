@@ -1,0 +1,6 @@
+from rust.std.cmp import max as maximum, min
+
+def main():
+    let hi = maximum(10, 2)
+    let lo = min(10, 2)
+    $print(hi, lo)

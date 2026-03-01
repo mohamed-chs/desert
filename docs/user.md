@@ -158,6 +158,8 @@ Supported forms:
 ```python
 import "util/math.ds"
 import util.math
+import rust.std.collections.HashMap as Map
+from rust.std.cmp import max as maximum, min
 import rust.std.cmp.max
 import "rust:std::io::Read"
 ```
@@ -169,6 +171,7 @@ Rules:
 - `.ds` extension is implied for dotted forms.
 - Import cycles are rejected.
 - `import rust...` / `import "rust:..."` lower to Rust `use ...;` and currently support `std`, `core`, and `alloc` roots.
+- `from rust... import ...` lowers to grouped Rust `use base::{...};`.
 
 ## Language Quick Reference
 

@@ -312,6 +312,24 @@ fn check_file_input_with_rust_import_resolves_symbols() {
 }
 
 #[test]
+fn check_file_input_with_rust_from_import_alias_resolves_symbols() {
+    let mut cmd = cargo_bin_cmd!("desert");
+    cmd.arg("check")
+        .arg("tests/fixtures/check_ok_rust_from_import_alias.ds");
+    cmd.assert().success();
+}
+
+#[test]
+fn check_rejects_unsupported_rust_import_root() {
+    let mut cmd = cargo_bin_cmd!("desert");
+    cmd.arg("check")
+        .arg("tests/fixtures/check_fail_rust_import_unsupported_root.ds");
+    cmd.assert().failure().stderr(predicates::str::contains(
+        "unsupported rust import root `serde` (only std/core/alloc are supported)",
+    ));
+}
+
+#[test]
 fn check_reports_return_outside_def() {
     let mut cmd = cargo_bin_cmd!("desert");
     cmd.arg("check")

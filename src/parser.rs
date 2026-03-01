@@ -382,11 +382,9 @@ fn mut_statement(input: &[TokenSpan]) -> ParseResult<'_, StatementKind> {
     Ok((input, StatementKind::Mut { name, ty, value }))
 }
 
-fn import_statement(input: &[TokenSpan]) -> ParseResult<'_, StatementKind> {
-    let (input, _) = token(Token::Import)(input)?;
-
+fn import_path(input: &[TokenSpan]) -> ParseResult<'_, String> {
     if let Some(((Token::String(path), _), rest)) = input.split_first() {
-        return Ok((rest, StatementKind::Import(path.clone())));
+        return Ok((rest, path.clone()));
     }
 
     let (mut current_input, first) = ident(input)?;
@@ -397,7 +395,63 @@ fn import_statement(input: &[TokenSpan]) -> ParseResult<'_, StatementKind> {
         current_input = next_input;
     }
 
-    Ok((current_input, StatementKind::Import(parts.join("/"))))
+    Ok((current_input, parts.join("/")))
+}
+
+fn import_statement(input: &[TokenSpan]) -> ParseResult<'_, StatementKind> {
+    let (input, _) = token(Token::Import)(input)?;
+    let (input, path) = import_path(input)?;
+
+    let mut alias = None;
+    let mut current_input = input;
+    if let Ok((next_input, _)) = token(Token::As)(current_input) {
+        let (next_input, name) = ident(next_input)?;
+        alias = Some(name);
+        current_input = next_input;
+    }
+
+    Ok((
+        current_input,
+        StatementKind::Import {
+            path,
+            alias,
+        },
+    ))
+}
+
+fn from_import_statement(input: &[TokenSpan]) -> ParseResult<'_, StatementKind> {
+    let (input, _) = token(Token::From)(input)?;
+    let (input, path) = import_path(input)?;
+    let (input, _) = token(Token::Import)(input)?;
+
+    let (mut current_input, first_name) = ident(input)?;
+    let mut items = Vec::new();
+
+    let mut first_alias = None;
+    if let Ok((next_input, _)) = token(Token::As)(current_input) {
+        let (next_input, alias) = ident(next_input)?;
+        first_alias = Some(alias);
+        current_input = next_input;
+    }
+    items.push(ImportItem {
+        name: first_name,
+        alias: first_alias,
+    });
+
+    while let Ok((next_input, _)) = token(Token::Comma)(current_input) {
+        let (next_input, name) = ident(next_input)?;
+        let mut alias = None;
+        let mut next_cursor = next_input;
+        if let Ok((alias_input, _)) = token(Token::As)(next_cursor) {
+            let (alias_input, alias_name) = ident(alias_input)?;
+            alias = Some(alias_name);
+            next_cursor = alias_input;
+        }
+        items.push(ImportItem { name, alias });
+        current_input = next_cursor;
+    }
+
+    Ok((current_input, StatementKind::FromImport { path, items }))
 }
 
 fn block(input: &[TokenSpan]) -> ParseResult<'_, Vec<Statement>> {
@@ -712,6 +766,8 @@ fn statement(input: &[TokenSpan]) -> ParseResult<'_, Statement> {
         (rest, kind)
     } else if let Ok((rest, kind)) = mut_statement(input) {
         (rest, kind)
+    } else if let Ok((rest, kind)) = from_import_statement(input) {
+        (rest, kind)
     } else if let Ok((rest, kind)) = import_statement(input) {
         (rest, kind)
     } else if let Ok((rest, kind)) = def_statement(input) {
@@ -888,7 +944,10 @@ mod tests {
         let (_, program) = parse_program(&tokens).unwrap();
 
         match &program.statements[0].kind {
-            StatementKind::Import(path) => assert_eq!(path, "utils/math.ds"),
+            StatementKind::Import { path, alias } => {
+                assert_eq!(path, "utils/math.ds");
+                assert!(alias.is_none());
+            }
             _ => panic!("Expected Import statement"),
         }
     }
@@ -901,7 +960,46 @@ mod tests {
         let (_, program) = parse_program(&tokens).unwrap();
 
         match &program.statements[0].kind {
-            StatementKind::Import(path) => assert_eq!(path, "utils/math"),
+            StatementKind::Import { path, alias } => {
+                assert_eq!(path, "utils/math");
+                assert!(alias.is_none());
+            }
+            _ => panic!("Expected Import statement"),
+        }
+    }
+
+    #[test]
+    fn test_parse_import_alias() {
+        let input = "import rust.std.collections.HashMap as Map";
+        let lexer = Lexer::new(input);
+        let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
+        let (_, program) = parse_program(&tokens).unwrap();
+
+        match &program.statements[0].kind {
+            StatementKind::Import { path, alias } => {
+                assert_eq!(path, "rust/std/collections/HashMap");
+                assert_eq!(alias.as_deref(), Some("Map"));
+            }
+            _ => panic!("Expected Import statement"),
+        }
+    }
+
+    #[test]
+    fn test_parse_from_import_with_aliases() {
+        let input = "from rust.std.cmp import max as maximum, min";
+        let lexer = Lexer::new(input);
+        let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
+        let (_, program) = parse_program(&tokens).unwrap();
+
+        match &program.statements[0].kind {
+            StatementKind::FromImport { path, items } => {
+                assert_eq!(path, "rust/std/cmp");
+                assert_eq!(items.len(), 2);
+                assert_eq!(items[0].name, "max");
+                assert_eq!(items[0].alias.as_deref(), Some("maximum"));
+                assert_eq!(items[1].name, "min");
+                assert!(items[1].alias.is_none());
+            }
             _ => panic!("Expected Import statement"),
         }
     }
