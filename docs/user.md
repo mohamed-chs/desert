@@ -158,6 +158,8 @@ Supported forms:
 ```python
 import "util/math.ds"
 import util.math
+import rust.std.cmp.max
+import "rust:std::io::Read"
 ```
 
 Rules:
@@ -166,6 +168,7 @@ Rules:
 - Dotted imports resolve relative to the importing file.
 - `.ds` extension is implied for dotted forms.
 - Import cycles are rejected.
+- `import rust...` / `import "rust:..."` lower to Rust `use ...;` and currently support `std`, `core`, and `alloc` roots.
 
 ## Language Quick Reference
 

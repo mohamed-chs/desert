@@ -1,4 +1,5 @@
 use crate::ast::*;
+use crate::imports::rust_use_from_import_path;
 use crate::resolver::Resolver;
 use crate::sourcemap::{SourceLocation, SourceMap};
 use std::collections::HashMap;
@@ -59,9 +60,21 @@ impl Transpiler {
         let mut current_line = 0;
         let struct_fields = self.collect_struct_fields(program);
         let protocol_names = self.collect_protocol_names(program);
+        let rust_uses = self.collect_rust_uses(program);
         let uses_matmul = self.program_uses_matmul(program);
         let mut resolver = Resolver::new();
         self.seed_resolver_types(program, &mut resolver);
+
+        for rust_use in &rust_uses {
+            output.push_str(&format!("use {};\n", rust_use));
+            source_map.add_mapping(current_line, generated_location());
+            current_line += 1;
+        }
+        if !rust_uses.is_empty() {
+            output.push('\n');
+            source_map.add_mapping(current_line, generated_location());
+            current_line += 1;
+        }
 
         if uses_matmul {
             output.push_str(MATMUL_PRELUDE);
@@ -774,6 +787,20 @@ impl Transpiler {
         protocol_names
     }
 
+    fn collect_rust_uses(&self, program: &Program) -> Vec<String> {
+        let mut uses = HashSet::new();
+        for stmt in &program.statements {
+            if let StatementKind::Import(path) = &stmt.kind
+                && let Some(use_path) = rust_use_from_import_path(path)
+            {
+                uses.insert(use_path);
+            }
+        }
+        let mut ordered: Vec<String> = uses.into_iter().collect();
+        ordered.sort();
+        ordered
+    }
+
     fn transpile_param_type(&self, ty: &Type, protocol_names: &HashSet<String>) -> String {
         if let Type::Simple(name) = ty
             && protocol_names.contains(name)
@@ -1337,6 +1364,18 @@ mod tests {
         let (rust_code, _) = transpile_program(&transpiler, &program, input);
         assert!(rust_code.contains("/* Desert PyImport block:"));
         assert!(rust_code.contains("import torch"));
+    }
+
+    #[test]
+    fn test_transpile_rust_import_emits_use() {
+        let input = "import rust.std.cmp.max\n\ndef main():\n    let best = max(1, 2)";
+        let lexer = Lexer::new(input);
+        let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
+        let (_, program) = parse_program(&tokens).unwrap();
+        let transpiler = Transpiler::new();
+        let (rust_code, _) = transpile_program(&transpiler, &program, input);
+        assert!(rust_code.contains("use std::cmp::max;"));
+        assert!(rust_code.contains("let best = max(1, 2);"));
     }
 
     #[test]

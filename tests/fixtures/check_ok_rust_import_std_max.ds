@@ -1,0 +1,5 @@
+import rust.std.cmp.max
+
+def main():
+    let best = max(4, 9)
+    $print(best)

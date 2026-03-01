@@ -7,7 +7,7 @@ The design priority is explicit semantics with predictable lowering. Syntax that
 ## Current Language Surface
 
 - Blocks: `if`, `for`, `def`, `struct`, `protocol`, `impl`, `match`
-- Imports: `import "relative/path.ds"` and `import dotted.module` (resolved relative to the importing file, `.ds` default extension)
+- Imports: `import "relative/path.ds"` and `import dotted.module` (resolved relative to the importing file, `.ds` default extension), plus Rust `use` passthrough via `import rust.std.cmp.max` or `import "rust:std::cmp::max"` (`std`/`core`/`alloc` roots)
 - Bindings: `let` and `mut`
 - Ownership and borrows:
   - `move place` lowers to `std::mem::take(&mut place)`

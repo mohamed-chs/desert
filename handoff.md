@@ -29,6 +29,7 @@ Core quality checks currently pass:
 - Definitions: `def`, `struct`, `protocol`, `impl`
 - Expressions: literals, calls, member access, generic calls, indexing, assignment
 - Imports: top-level `import` statements for both single-file and project inputs
+- Rust use passthrough imports: `import rust.std...` and `import "rust:std::..."` lower to `use ...;` (currently `std`/`core`/`alloc`)
 - Ownership/error syntax: `move`, `&`, `~`, `?`, `!!`
 - Macros: `$name(...)` with `$print` -> `println!`
 - `pyimport` blocks: parsed and emitted as Rust comments
@@ -89,6 +90,7 @@ Core quality checks currently pass:
 - Added semantic validation that direct calls to declared `def` names fail fast on argument-count mismatches (including forward local defs and generic-call form) before Rust lowering.
 - Added match-pattern binder predeclaration for arm scopes (for example `Some(node)`), so arm-body identifier checks recognize pattern-bound names.
 - Added file-mode import graph loading (with cycle detection) so `desert check/transpile/run path/to/file.ds` resolves top-level imported modules the same way project mode does.
+- Added Rust-import passthrough semantics: `import rust...`/`import "rust:..."` now emit Rust `use` statements, skip local `.ds` graph resolution, and predeclare imported leaf names for semantic identifier validation.
 
 ## Known Gaps
 

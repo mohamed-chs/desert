@@ -47,3 +47,4 @@ This roadmap follows current project direction: prioritize project workflow and 
 - Recent shipped behavior: semantic validation now checks direct `def` call arity (including forward local defs and generic-call syntax) before rustc.
 - Recent shipped behavior: `transpile`/`check`/`run`/`fmt`/`graph` now default to current directory when input is omitted.
 - Recent shipped behavior: project-directory inputs without a manifest now use fallback entry discovery (`src/main.ds`, then `main.ds`).
+- Recent shipped behavior: `import rust...` / `import "rust:..."` now lowers to Rust `use ...;` statements (currently whitelisted to `std`/`core`/`alloc` roots), is ignored by local file-graph loading, and predeclares imported names for semantic identifier checks.

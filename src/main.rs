@@ -1,5 +1,6 @@
 pub mod ast;
 pub mod formatter;
+pub mod imports;
 pub mod lexer;
 pub mod mirage;
 pub mod parser;
@@ -440,6 +441,9 @@ fn collect_file_sources(
 
     for stmt in &program.statements {
         if let crate::ast::StatementKind::Import(path) = &stmt.kind {
+            if crate::imports::rust_use_from_import_path(path).is_some() {
+                continue;
+            }
             let import_path = resolve_import_path(&canonical_file, path, None)?;
             collect_file_sources(&import_path, visited, loading, ordered_files)?;
         }
@@ -486,6 +490,9 @@ fn collect_project_sources(
 
     for stmt in &program.statements {
         if let crate::ast::StatementKind::Import(path) = &stmt.kind {
+            if crate::imports::rust_use_from_import_path(path).is_some() {
+                continue;
+            }
             let import_path = resolve_import_path(&canonical_file, path, Some(project_root))?;
             collect_project_sources(&import_path, project_root, visited, loading, ordered_files)?;
         }
@@ -1237,11 +1244,22 @@ fn validate_statements(
                     false,
                 )?;
             }
-            StatementKind::Import(_) => {
+            StatementKind::Import(path) => {
                 if nesting_depth > 0 {
                     return Err(SemanticError {
                         offset: stmt.span.start,
                         message: "`import` is only allowed at top level".to_string(),
+                    });
+                }
+                if let Some(use_path) = crate::imports::rust_use_from_import_path(path)
+                    && !crate::imports::is_supported_rust_root(&use_path)
+                {
+                    return Err(SemanticError {
+                        offset: stmt.span.start,
+                        message: format!(
+                            "unsupported rust import root `{}` (only std/core/alloc are supported)",
+                            use_path.split("::").next().unwrap_or(&use_path)
+                        ),
                     });
                 }
             }
@@ -1507,22 +1525,48 @@ fn predeclare_block_symbols(
     scopes: &mut [HashMap<String, BindingInfo>],
 ) -> Result<(), SemanticError> {
     for stmt in statements {
-        if let crate::ast::StatementKind::Def { name, params, .. } = &stmt.kind {
-            if current_scope_contains(scopes, name) {
-                return Err(SemanticError {
-                    offset: stmt.span.start,
-                    message: format!("duplicate local name `{}` in same scope", name),
-                });
+        match &stmt.kind {
+            crate::ast::StatementKind::Def { name, params, .. } => {
+                if current_scope_contains(scopes, name) {
+                    return Err(SemanticError {
+                        offset: stmt.span.start,
+                        message: format!("duplicate local name `{}` in same scope", name),
+                    });
+                }
+                declare_binding(
+                    scopes,
+                    name,
+                    BindingInfo {
+                        is_mut: false,
+                        can_write_through: false,
+                        callable_arity: Some(params.len()),
+                    },
+                );
             }
-            declare_binding(
-                scopes,
-                name,
-                BindingInfo {
-                    is_mut: false,
-                    can_write_through: false,
-                    callable_arity: Some(params.len()),
-                },
-            );
+            crate::ast::StatementKind::Import(path) => {
+                let Some(use_path) = crate::imports::rust_use_from_import_path(path) else {
+                    continue;
+                };
+                let Some(name) = crate::imports::rust_import_binding_name(&use_path) else {
+                    continue;
+                };
+                if current_scope_contains(scopes, name) {
+                    return Err(SemanticError {
+                        offset: stmt.span.start,
+                        message: format!("duplicate local name `{}` in same scope", name),
+                    });
+                }
+                declare_binding(
+                    scopes,
+                    name,
+                    BindingInfo {
+                        is_mut: false,
+                        can_write_through: false,
+                        callable_arity: None,
+                    },
+                );
+            }
+            _ => {}
         }
     }
     Ok(())
