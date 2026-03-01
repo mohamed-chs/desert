@@ -2,6 +2,13 @@
 
 Desert is an indentation-based language that transpiles to Rust, combining Python-like syntax with Rust's performance and safety model.
 
+## Docs
+
+- User guide: `docs/user.md`
+- Developer guide: `docs/dev.md`
+- Language details: `overview.md`
+- Project status and next work: `handoff.md`, `plan.md`
+
 ## Features
 
 - **Syntax**: Indentation-driven blocks (`if`, `def`, `struct`, `impl`, etc.).
