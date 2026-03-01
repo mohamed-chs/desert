@@ -29,6 +29,8 @@ The design priority is explicit semantics with predictable lowering. Syntax that
   - generic calls: `obj.method[T](arg)` -> `obj.method::<T>(arg)`
 - Struct constructor calls:
   - `Type(...)` is validated before Rust emission: named args must be `field = value`, fields must exist and be unique, positional arity must fit, and required fields cannot be omitted
+- Top-level declarations:
+  - Duplicate top-level `def`/`struct`/`protocol` names are rejected during semantic validation before Rust emission
 - Unified dot resolution with scoped type/value tracking:
   - static call: `Type.new()` -> `Type::new()`
   - method call: `value.method()` -> `value.method()`

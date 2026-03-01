@@ -240,6 +240,16 @@ fn check_reports_duplicate_function_parameters() {
 }
 
 #[test]
+fn check_reports_duplicate_top_level_function_names() {
+    let mut cmd = cargo_bin_cmd!("desert");
+    cmd.arg("check")
+        .arg("tests/fixtures/check_fail_duplicate_top_level_def.ds");
+    cmd.assert().failure().stderr(predicates::str::contains(
+        "Semantic error at line 4, column 1: duplicate top-level function `foo`",
+    ));
+}
+
+#[test]
 fn check_reports_duplicate_struct_fields() {
     let mut cmd = cargo_bin_cmd!("desert");
     cmd.arg("check")

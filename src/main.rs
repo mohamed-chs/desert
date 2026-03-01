@@ -691,6 +691,15 @@ struct BindingInfo {
 }
 
 fn validate_program(input_content: &str, program: &crate::ast::Program) -> anyhow::Result<()> {
+    validate_top_level_declarations(program).map_err(|err| {
+        let (line, col) = line_col_from_offset(input_content, err.offset);
+        anyhow::anyhow!(
+            "Semantic error at line {}, column {}: {}",
+            line,
+            col,
+            err.message
+        )
+    })?;
     let struct_fields = collect_struct_fields(program);
     let mut scopes = vec![HashMap::new()];
     validate_statements(&program.statements, &mut scopes, &struct_fields, 0, 0).map_err(|err| {
@@ -702,6 +711,44 @@ fn validate_program(input_content: &str, program: &crate::ast::Program) -> anyho
             err.message
         )
     })
+}
+
+fn validate_top_level_declarations(program: &crate::ast::Program) -> Result<(), SemanticError> {
+    let mut function_names = HashSet::new();
+    let mut struct_names = HashSet::new();
+    let mut protocol_names = HashSet::new();
+
+    for stmt in &program.statements {
+        match &stmt.kind {
+            crate::ast::StatementKind::Def { name, .. } => {
+                if !function_names.insert(name.as_str()) {
+                    return Err(SemanticError {
+                        offset: stmt.span.start,
+                        message: format!("duplicate top-level function `{}`", name),
+                    });
+                }
+            }
+            crate::ast::StatementKind::Struct { name, .. } => {
+                if !struct_names.insert(name.as_str()) {
+                    return Err(SemanticError {
+                        offset: stmt.span.start,
+                        message: format!("duplicate top-level struct `{}`", name),
+                    });
+                }
+            }
+            crate::ast::StatementKind::Protocol { name, .. } => {
+                if !protocol_names.insert(name.as_str()) {
+                    return Err(SemanticError {
+                        offset: stmt.span.start,
+                        message: format!("duplicate top-level protocol `{}`", name),
+                    });
+                }
+            }
+            _ => {}
+        }
+    }
+
+    Ok(())
 }
 
 fn validate_statements(
