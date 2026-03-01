@@ -210,6 +210,16 @@ fn check_reports_constructor_missing_fields() {
 }
 
 #[test]
+fn check_reports_nested_import_requires_top_level() {
+    let mut cmd = cargo_bin_cmd!("desert");
+    cmd.arg("check")
+        .arg("tests/fixtures/check_fail_nested_import.ds");
+    cmd.assert().failure().stderr(predicates::str::contains(
+        "Semantic error at line 2, column 5: `import` is only allowed at top level",
+    ));
+}
+
+#[test]
 fn check_reports_method_resolution_failure_with_desert_line_mapping() {
     let mut cmd = cargo_bin_cmd!("desert");
     cmd.arg("check")

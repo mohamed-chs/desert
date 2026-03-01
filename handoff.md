@@ -70,6 +70,7 @@ Core quality checks currently pass:
 - Removed statement-level borrow declarations (`ref`, `mut ref`) from AST/parser/transpiler. Borrow binding is now expression-only (`let a = &x`, `let b = ~x`), and `ref` is no longer a reserved keyword.
 - Added `import` parsing and project graph loading so multi-file projects compile from a single entrypoint.
 - Added file-aware diagnostic mapping so `desert check <project_dir>` now reports imported-module paths with Desert line numbers (for example, `src/util/math.ds:2`).
+- Added semantic validation that rejects nested `import` statements (`import` is now top-level-only) to match project graph resolution behavior and avoid silently ignored block-local imports.
 
 ## Known Gaps
 

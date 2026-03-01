@@ -1,0 +1,3 @@
+def main():
+    import "util/math.ds"
+    $print("hello")
