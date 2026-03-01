@@ -798,6 +798,12 @@ fn validate_statements(
         use crate::ast::StatementKind;
         match &stmt.kind {
             StatementKind::Let { name, value, .. } => {
+                if current_scope_contains(scopes, name) {
+                    return Err(SemanticError {
+                        offset: stmt.span.start,
+                        message: format!("duplicate local binding `{}` in same scope", name),
+                    });
+                }
                 validate_expression(value, stmt.span.start, scopes, struct_fields)?;
                 declare_binding(
                     scopes,
@@ -809,6 +815,12 @@ fn validate_statements(
                 );
             }
             StatementKind::Mut { name, value, .. } => {
+                if current_scope_contains(scopes, name) {
+                    return Err(SemanticError {
+                        offset: stmt.span.start,
+                        message: format!("duplicate local binding `{}` in same scope", name),
+                    });
+                }
                 validate_expression(value, stmt.span.start, scopes, struct_fields)?;
                 declare_binding(
                     scopes,
@@ -1368,6 +1380,10 @@ fn declare_binding(scopes: &mut [HashMap<String, BindingInfo>], name: &str, bind
     if let Some(scope) = scopes.last_mut() {
         scope.insert(name.to_string(), binding);
     }
+}
+
+fn current_scope_contains(scopes: &[HashMap<String, BindingInfo>], name: &str) -> bool {
+    scopes.last().is_some_and(|scope| scope.contains_key(name))
 }
 
 fn lookup_binding<'a>(

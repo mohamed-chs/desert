@@ -240,6 +240,16 @@ fn check_reports_duplicate_function_parameters() {
 }
 
 #[test]
+fn check_reports_duplicate_local_binding_in_same_scope() {
+    let mut cmd = cargo_bin_cmd!("desert");
+    cmd.arg("check")
+        .arg("tests/fixtures/check_fail_duplicate_local_binding.ds");
+    cmd.assert().failure().stderr(predicates::str::contains(
+        "Semantic error at line 3, column 5: duplicate local binding `x` in same scope",
+    ));
+}
+
+#[test]
 fn check_reports_duplicate_top_level_function_names() {
     let mut cmd = cargo_bin_cmd!("desert");
     cmd.arg("check")
