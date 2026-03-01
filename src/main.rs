@@ -693,7 +693,7 @@ struct BindingInfo {
 fn validate_program(input_content: &str, program: &crate::ast::Program) -> anyhow::Result<()> {
     let struct_fields = collect_struct_fields(program);
     let mut scopes = vec![HashMap::new()];
-    validate_statements(&program.statements, &mut scopes, &struct_fields, 0).map_err(|err| {
+    validate_statements(&program.statements, &mut scopes, &struct_fields, 0, 0).map_err(|err| {
         let (line, col) = line_col_from_offset(input_content, err.offset);
         anyhow::anyhow!(
             "Semantic error at line {}, column {}: {}",
@@ -709,6 +709,7 @@ fn validate_statements(
     scopes: &mut Vec<HashMap<String, BindingInfo>>,
     struct_fields: &HashMap<String, Vec<String>>,
     nesting_depth: usize,
+    function_depth: usize,
 ) -> Result<(), SemanticError> {
     predeclare_block_symbols(statements, scopes);
 
@@ -750,7 +751,13 @@ fn validate_statements(
                         },
                     );
                 }
-                validate_statements(body, scopes, struct_fields, nesting_depth + 1)?;
+                validate_statements(
+                    body,
+                    scopes,
+                    struct_fields,
+                    nesting_depth + 1,
+                    function_depth + 1,
+                )?;
                 scopes.pop();
             }
             StatementKind::If {
@@ -760,11 +767,23 @@ fn validate_statements(
             } => {
                 validate_expression(condition, stmt.span.start, scopes, struct_fields)?;
                 scopes.push(HashMap::new());
-                validate_statements(then_block, scopes, struct_fields, nesting_depth + 1)?;
+                validate_statements(
+                    then_block,
+                    scopes,
+                    struct_fields,
+                    nesting_depth + 1,
+                    function_depth,
+                )?;
                 scopes.pop();
                 if let Some(block) = else_block {
                     scopes.push(HashMap::new());
-                    validate_statements(block, scopes, struct_fields, nesting_depth + 1)?;
+                    validate_statements(
+                        block,
+                        scopes,
+                        struct_fields,
+                        nesting_depth + 1,
+                        function_depth,
+                    )?;
                     scopes.pop();
                 }
             }
@@ -783,7 +802,13 @@ fn validate_statements(
                         can_write_through: false,
                     },
                 );
-                validate_statements(body, scopes, struct_fields, nesting_depth + 1)?;
+                validate_statements(
+                    body,
+                    scopes,
+                    struct_fields,
+                    nesting_depth + 1,
+                    function_depth,
+                )?;
                 scopes.pop();
             }
             StatementKind::Match { expression, arms } => {
@@ -791,15 +816,36 @@ fn validate_statements(
                 for (pattern, body) in arms {
                     validate_expression(pattern, stmt.span.start, scopes, struct_fields)?;
                     scopes.push(HashMap::new());
-                    validate_statements(body, scopes, struct_fields, nesting_depth + 1)?;
+                    validate_statements(
+                        body,
+                        scopes,
+                        struct_fields,
+                        nesting_depth + 1,
+                        function_depth,
+                    )?;
                     scopes.pop();
                 }
             }
-            StatementKind::Return(Some(expr)) | StatementKind::Expr(expr) => {
+            StatementKind::Return(Some(expr)) => {
+                if function_depth == 0 {
+                    return Err(SemanticError {
+                        offset: stmt.span.start,
+                        message: "`return` is only allowed inside `def` bodies".to_string(),
+                    });
+                }
+                validate_expression(expr, stmt.span.start, scopes, struct_fields)?;
+            }
+            StatementKind::Expr(expr) => {
                 validate_expression(expr, stmt.span.start, scopes, struct_fields)?;
             }
             StatementKind::Impl { methods, .. } | StatementKind::Protocol { methods, .. } => {
-                validate_statements(methods, scopes, struct_fields, nesting_depth + 1)?;
+                validate_statements(
+                    methods,
+                    scopes,
+                    struct_fields,
+                    nesting_depth + 1,
+                    function_depth,
+                )?;
             }
             StatementKind::Import(_) => {
                 if nesting_depth > 0 {
@@ -809,7 +855,15 @@ fn validate_statements(
                     });
                 }
             }
-            StatementKind::Struct { .. } | StatementKind::PyImport(_) | StatementKind::Return(None) => {}
+            StatementKind::Return(None) => {
+                if function_depth == 0 {
+                    return Err(SemanticError {
+                        offset: stmt.span.start,
+                        message: "`return` is only allowed inside `def` bodies".to_string(),
+                    });
+                }
+            }
+            StatementKind::Struct { .. } | StatementKind::PyImport(_) => {}
         }
     }
     Ok(())

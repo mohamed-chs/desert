@@ -220,6 +220,16 @@ fn check_reports_nested_import_requires_top_level() {
 }
 
 #[test]
+fn check_reports_return_outside_def() {
+    let mut cmd = cargo_bin_cmd!("desert");
+    cmd.arg("check")
+        .arg("tests/fixtures/check_fail_return_outside_def.ds");
+    cmd.assert().failure().stderr(predicates::str::contains(
+        "Semantic error at line 1, column 1: `return` is only allowed inside `def` bodies",
+    ));
+}
+
+#[test]
 fn check_reports_method_resolution_failure_with_desert_line_mapping() {
     let mut cmd = cargo_bin_cmd!("desert");
     cmd.arg("check")
