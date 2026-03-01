@@ -702,7 +702,8 @@ fn validate_program(input_content: &str, program: &crate::ast::Program) -> anyho
     })?;
     let struct_fields = collect_struct_fields(program);
     let mut scopes = vec![HashMap::new()];
-    validate_statements(&program.statements, &mut scopes, &struct_fields, 0, 0).map_err(|err| {
+    validate_statements(&program.statements, &mut scopes, &struct_fields, 0, 0, true).map_err(
+        |err| {
         let (line, col) = line_col_from_offset(input_content, err.offset);
         anyhow::anyhow!(
             "Semantic error at line {}, column {}: {}",
@@ -710,7 +711,8 @@ fn validate_program(input_content: &str, program: &crate::ast::Program) -> anyho
             col,
             err.message
         )
-    })
+    },
+    )
 }
 
 fn validate_top_level_declarations(program: &crate::ast::Program) -> Result<(), SemanticError> {
@@ -791,8 +793,11 @@ fn validate_statements(
     struct_fields: &HashMap<String, Vec<String>>,
     nesting_depth: usize,
     function_depth: usize,
+    predeclare_defs: bool,
 ) -> Result<(), SemanticError> {
-    predeclare_block_symbols(statements, scopes);
+    if predeclare_defs {
+        predeclare_block_symbols(statements, scopes)?;
+    }
 
     for stmt in statements {
         use crate::ast::StatementKind;
@@ -862,6 +867,7 @@ fn validate_statements(
                     struct_fields,
                     nesting_depth + 1,
                     function_depth + 1,
+                    true,
                 )?;
                 scopes.pop();
             }
@@ -878,6 +884,7 @@ fn validate_statements(
                     struct_fields,
                     nesting_depth + 1,
                     function_depth,
+                    true,
                 )?;
                 scopes.pop();
                 if let Some(block) = else_block {
@@ -888,6 +895,7 @@ fn validate_statements(
                         struct_fields,
                         nesting_depth + 1,
                         function_depth,
+                        true,
                     )?;
                     scopes.pop();
                 }
@@ -913,6 +921,7 @@ fn validate_statements(
                     struct_fields,
                     nesting_depth + 1,
                     function_depth,
+                    true,
                 )?;
                 scopes.pop();
             }
@@ -927,6 +936,7 @@ fn validate_statements(
                         struct_fields,
                         nesting_depth + 1,
                         function_depth,
+                        true,
                     )?;
                     scopes.pop();
                 }
@@ -962,6 +972,7 @@ fn validate_statements(
                     struct_fields,
                     nesting_depth + 1,
                     function_depth,
+                    false,
                 )?;
             }
             StatementKind::Protocol { name, methods } => {
@@ -981,6 +992,7 @@ fn validate_statements(
                     struct_fields,
                     nesting_depth + 1,
                     function_depth,
+                    false,
                 )?;
             }
             StatementKind::Import(_) => {
@@ -1227,9 +1239,15 @@ fn validate_place_subexpressions(
 fn predeclare_block_symbols(
     statements: &[crate::ast::Statement],
     scopes: &mut [HashMap<String, BindingInfo>],
-) {
+) -> Result<(), SemanticError> {
     for stmt in statements {
         if let crate::ast::StatementKind::Def { name, .. } = &stmt.kind {
+            if current_scope_contains(scopes, name) {
+                return Err(SemanticError {
+                    offset: stmt.span.start,
+                    message: format!("duplicate local name `{}` in same scope", name),
+                });
+            }
             declare_binding(
                 scopes,
                 name,
@@ -1240,6 +1258,7 @@ fn predeclare_block_symbols(
             );
         }
     }
+    Ok(())
 }
 
 fn validate_method_name_uniqueness(

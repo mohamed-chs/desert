@@ -74,6 +74,7 @@ Core quality checks currently pass:
 - Added semantic validation that rejects `return` outside `def` bodies so invalid top-level/control-block returns fail early with Desert line/column errors.
 - Added semantic validation that rejects duplicate parameter names in a single `def` signature before Rust lowering.
 - Added semantic validation that rejects duplicate local `let`/`mut` bindings in the same block scope before Rust lowering.
+- Added semantic predeclaration checks so local `def` names cannot collide in the same scope (including collisions with existing local names such as params/bindings).
 - Added semantic validation that rejects duplicate field names within a `struct` declaration before Rust lowering.
 - Added semantic validation that rejects duplicate top-level `def`/`struct`/`protocol` names before Rust lowering.
 - Added semantic validation that rejects top-level name collisions across declaration kinds (for example `def Foo` and `struct Foo`) before Rust lowering.

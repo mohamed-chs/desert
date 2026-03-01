@@ -34,6 +34,7 @@ The design priority is explicit semantics with predictable lowering. Syntax that
   - Top-level names must also be unique across declaration kinds (`def`/`struct`/`protocol`)
 - Local bindings:
   - `let`/`mut` redeclaration of the same name in a single block scope is rejected during semantic validation
+  - Local `def` names must also be unique within a single block scope and cannot collide with already-declared local names
 - `impl`/`protocol` method declarations:
   - Duplicate method names within the same `impl` or `protocol` block are rejected during semantic validation
   - `impl` and `protocol` bodies only allow `def` declarations
