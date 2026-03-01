@@ -46,3 +46,4 @@ This roadmap follows current project direction: prioritize project workflow and 
 - Recent shipped behavior: file-mode import graph resolution now loads top-level `import` dependencies (with cycle detection) for `check`/`transpile`/`run`, not just project-directory inputs.
 - Recent shipped behavior: semantic validation now checks direct `def` call arity (including forward local defs and generic-call syntax) before rustc.
 - Recent shipped behavior: `transpile`/`check`/`run`/`fmt`/`graph` now default to current directory when input is omitted.
+- Recent shipped behavior: project-directory inputs without a manifest now use fallback entry discovery (`src/main.ds`, then `main.ds`).

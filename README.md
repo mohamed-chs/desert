@@ -23,13 +23,13 @@ cargo build --release
 
 ### Commands
 - **Transpile**: `desert transpile input.ds -o output.rs`
-- **Transpile Project**: `desert transpile path/to/project` (expects `desert.toml` or `Desert.toml`, default entry `src/main.ds`)
+- **Transpile Project**: `desert transpile path/to/project` (uses `desert.toml`/`Desert.toml` when present; otherwise falls back to `src/main.ds` then `main.ds`)
 - **Transpile Current Project**: `desert transpile`
 - **Check**: `desert check input.ds` (runs rustc and translates errors)
-- **Check Project**: `desert check path/to/project` (same manifest/entrypoint resolution)
+- **Check Project**: `desert check path/to/project` (same manifest/fallback entrypoint resolution)
 - **Check Current Project**: `desert check`
 - **Run**: `desert run input.ds`
-- **Run Project**: `desert run path/to/project`
+- **Run Project**: `desert run path/to/project` (same manifest/fallback entrypoint resolution)
 - **Run Current Project**: `desert run`
 - **Run With Args**: `desert run input.ds -- arg1 arg2`
 - **New Project**: `desert new my_app`

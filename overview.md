@@ -56,7 +56,7 @@ The design priority is explicit semantics with predictable lowering. Syntax that
 - `desert check` defaults to current directory
 - `desert run <file.ds> [-- args...]`
 - `desert run` defaults to current directory
-- `desert transpile <project_dir>` with `desert.toml`/`Desert.toml` (`[package].entry`, default `src/main.ds`)
+- `desert transpile <project_dir>` with `desert.toml`/`Desert.toml` (`[package].entry`, default `src/main.ds`), or fallback entry resolution (`src/main.ds`, then `main.ds`) when no manifest exists
 - `desert check <project_dir> [--stage syntax|semantic|rust]` with the same project entry resolution
 - `desert run <project_dir> [-- args...]` with the same project entry resolution
 - `desert new <path> [--force]` to scaffold `desert.toml` and `src/main.ds`

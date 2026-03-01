@@ -263,13 +263,20 @@ fn resolve_project_entry(project_root: &Path) -> anyhow::Result<PathBuf> {
     let manifest_path = ["desert.toml", "Desert.toml"]
         .iter()
         .map(|name| project_root.join(name))
-        .find(|path| path.is_file())
-        .ok_or_else(|| {
-            anyhow::anyhow!(
-                "project input '{}' is missing desert.toml or Desert.toml",
-                project_root.display()
-            )
-        })?;
+        .find(|path| path.is_file());
+
+    if manifest_path.is_none() {
+        let fallback_candidates = [project_root.join("src/main.ds"), project_root.join("main.ds")];
+        if let Some(entry_path) = fallback_candidates.iter().find(|path| path.is_file()) {
+            return Ok(entry_path.to_path_buf());
+        }
+        anyhow::bail!(
+            "project input '{}' is missing desert.toml/Desert.toml and no fallback entry was found (expected 'src/main.ds' or 'main.ds')",
+            project_root.display()
+        );
+    }
+
+    let manifest_path = manifest_path.unwrap();
 
     let manifest_content = fs::read_to_string(&manifest_path)?;
     let manifest: DesertManifest = toml::from_str(&manifest_content)

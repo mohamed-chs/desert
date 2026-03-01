@@ -547,6 +547,13 @@ fn check_project_directory_with_default_entry() {
 }
 
 #[test]
+fn check_project_directory_without_manifest_uses_fallback_entry() {
+    let mut cmd = cargo_bin_cmd!("desert");
+    cmd.arg("check").arg("tests/fixtures/project_no_manifest");
+    cmd.assert().success();
+}
+
+#[test]
 fn check_defaults_to_current_directory() {
     let mut cmd = cargo_bin_cmd!("desert");
     cmd.current_dir("tests/fixtures/project_ok");
@@ -568,6 +575,17 @@ fn transpile_project_directory_with_default_entry() {
     cmd.assert().success().stdout(predicates::str::contains(
         "println!(\"{}\", \"project ok\".to_string())",
     ));
+}
+
+#[test]
+fn transpile_project_directory_without_manifest_uses_fallback_entry() {
+    let mut cmd = cargo_bin_cmd!("desert");
+    cmd.arg("transpile")
+        .arg("tests/fixtures/project_no_manifest");
+    cmd.assert()
+        .success()
+        .stdout(predicates::str::contains("fn add("))
+        .stdout(predicates::str::contains("fn main("));
 }
 
 #[test]
@@ -608,6 +626,15 @@ fn graph_project_directory_with_import_graph_order() {
 }
 
 #[test]
+fn graph_project_directory_without_manifest_uses_fallback_entry() {
+    let mut cmd = cargo_bin_cmd!("desert");
+    cmd.arg("graph").arg("tests/fixtures/project_no_manifest");
+    cmd.assert().success().stdout(predicates::str::contains(
+        "src/util/math.ds\nsrc/main.ds\n",
+    ));
+}
+
+#[test]
 fn graph_defaults_to_current_directory() {
     let mut cmd = cargo_bin_cmd!("desert");
     cmd.current_dir("tests/fixtures/project_import_graph");
@@ -642,6 +669,13 @@ fn run_project_executes_program() {
     cmd.assert()
         .success()
         .stdout(predicates::str::contains("project ok"));
+}
+
+#[test]
+fn run_project_directory_without_manifest_uses_fallback_entry() {
+    let mut cmd = cargo_bin_cmd!("desert");
+    cmd.arg("run").arg("tests/fixtures/project_no_manifest");
+    cmd.assert().success().stdout(predicates::str::contains("7"));
 }
 
 #[test]

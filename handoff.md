@@ -39,6 +39,7 @@ Core quality checks currently pass:
 - `transpile`/`check`/`run`/`fmt`/`graph` now default to the current directory when input is omitted.
 - Project directories require `desert.toml` or `Desert.toml`.
 - Entrypoint resolution uses `[package].entry` when provided, defaulting to `src/main.ds`.
+- If no manifest exists, directory inputs now fall back to `src/main.ds`, then `main.ds`.
 - Project mode resolves top-level imports recursively (relative to importing file), defaults missing import extensions to `.ds`, and rejects import cycles.
 - `desert graph <project_dir>` prints the resolved import/topological load order used for compilation.
 - `desert run <input>` now compiles and executes file/project programs directly, with optional passthrough args after `--`.
