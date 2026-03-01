@@ -260,6 +260,16 @@ fn check_reports_duplicate_struct_fields() {
 }
 
 #[test]
+fn check_reports_duplicate_impl_method_names() {
+    let mut cmd = cargo_bin_cmd!("desert");
+    cmd.arg("check")
+        .arg("tests/fixtures/check_fail_impl_duplicate_method.ds");
+    cmd.assert().failure().stderr(predicates::str::contains(
+        "Semantic error at line 8, column 5: duplicate method `bump` in impl for `Counter`",
+    ));
+}
+
+#[test]
 fn check_reports_method_resolution_failure_with_desert_line_mapping() {
     let mut cmd = cargo_bin_cmd!("desert");
     cmd.arg("check")

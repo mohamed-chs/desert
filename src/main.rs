@@ -897,7 +897,28 @@ fn validate_statements(
             StatementKind::Expr(expr) => {
                 validate_expression(expr, stmt.span.start, scopes, struct_fields)?;
             }
-            StatementKind::Impl { methods, .. } | StatementKind::Protocol { methods, .. } => {
+            StatementKind::Impl {
+                for_type, methods, ..
+            } => {
+                validate_method_name_uniqueness(
+                    methods,
+                    stmt.span.start,
+                    &format!("impl for `{}`", for_type),
+                )?;
+                validate_statements(
+                    methods,
+                    scopes,
+                    struct_fields,
+                    nesting_depth + 1,
+                    function_depth,
+                )?;
+            }
+            StatementKind::Protocol { name, methods } => {
+                validate_method_name_uniqueness(
+                    methods,
+                    stmt.span.start,
+                    &format!("protocol `{}`", name),
+                )?;
                 validate_statements(
                     methods,
                     scopes,
@@ -1163,6 +1184,25 @@ fn predeclare_block_symbols(
             );
         }
     }
+}
+
+fn validate_method_name_uniqueness(
+    methods: &[crate::ast::Statement],
+    fallback_offset: usize,
+    owner_label: &str,
+) -> Result<(), SemanticError> {
+    let mut seen = HashSet::new();
+    for method in methods {
+        if let crate::ast::StatementKind::Def { name, .. } = &method.kind {
+            if !seen.insert(name.as_str()) {
+                return Err(SemanticError {
+                    offset: method.span.start.max(fallback_offset),
+                    message: format!("duplicate method `{}` in {}", name, owner_label),
+                });
+            }
+        }
+    }
+    Ok(())
 }
 
 fn validate_constructor_call(

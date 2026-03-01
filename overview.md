@@ -31,6 +31,8 @@ The design priority is explicit semantics with predictable lowering. Syntax that
   - `Type(...)` is validated before Rust emission: named args must be `field = value`, fields must exist and be unique, positional arity must fit, and required fields cannot be omitted
 - Top-level declarations:
   - Duplicate top-level `def`/`struct`/`protocol` names are rejected during semantic validation before Rust emission
+- `impl`/`protocol` method declarations:
+  - Duplicate method names within the same `impl` or `protocol` block are rejected during semantic validation
 - Unified dot resolution with scoped type/value tracking:
   - static call: `Type.new()` -> `Type::new()`
   - method call: `value.method()` -> `value.method()`
