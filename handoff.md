@@ -44,6 +44,7 @@ Core quality checks currently pass:
 - `desert new <path>` now scaffolds a runnable project (`desert.toml`, `src/main.ds`), with `--force` for non-empty dirs.
 - `desert fmt <file_or_dir> [--check]` now provides canonical source formatting and CI check mode.
 - `desert doctor [file_or_project]` now validates rustc availability and source/project parse+semantic health without running rustc checks.
+- `desert check` now supports staged validation (`--stage syntax|semantic|rust`) so CI can run parser-only or parser+semantic gates without invoking rustc.
 
 ## Recent Cleanup
 

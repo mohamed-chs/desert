@@ -13,7 +13,7 @@ use crate::sourcemap::SourceLocation;
 use crate::transpiler::Transpiler;
 
 type ParserError<'a> = NomErr<NomError<&'a [crate::parser::TokenSpan]>>;
-use clap::Parser;
+use clap::{Parser, ValueEnum};
 use nom::Err as NomErr;
 use nom::error::Error as NomError;
 use serde::Deserialize;
@@ -44,6 +44,9 @@ enum Commands {
     Check {
         /// Input .ds file
         input: PathBuf,
+        /// Check stage: syntax-only, syntax+semantic, or full rustc-backed check
+        #[arg(long, value_enum, default_value_t = CheckStage::Rust)]
+        stage: CheckStage,
     },
     /// Compile and run a .ds file or project
     Run {
@@ -94,21 +97,32 @@ fn main() -> anyhow::Result<()> {
                 println!("{}", rust_code);
             }
         }
-        Commands::Check { input } => {
-            let input_source = load_input_source(&input)?;
-            let (rust_code, source_map) = transpile_file(&input_source)?;
-
-            let output = run_rustc_check(&rust_code)?;
-            let saw_diagnostic = emit_translated_diagnostics(&output, &source_map)?;
-
-            if !output.status.success() {
-                if !saw_diagnostic {
-                    anyhow::bail!("Rust check failed.");
-                }
-                anyhow::bail!("Rust check failed with translated diagnostics.");
+        Commands::Check { input, stage } => match stage {
+            CheckStage::Syntax => {
+                check_syntax_input(&input)?;
+                println!("Syntax check passed.");
             }
+            CheckStage::Semantic => {
+                let input_source = load_input_source(&input)?;
+                validate_input_semantics(&input_source)?;
+                println!("Semantic check passed.");
+            }
+            CheckStage::Rust => {
+                let input_source = load_input_source(&input)?;
+                let (rust_code, source_map) = transpile_file(&input_source)?;
 
-            println!("Check passed.");
+                let output = run_rustc_check(&rust_code)?;
+                let saw_diagnostic = emit_translated_diagnostics(&output, &source_map)?;
+
+                if !output.status.success() {
+                    if !saw_diagnostic {
+                        anyhow::bail!("Rust check failed.");
+                    }
+                    anyhow::bail!("Rust check failed with translated diagnostics.");
+                }
+
+                println!("Check passed.");
+            }
         }
         Commands::Run { input, args } => {
             let input_source = load_input_source(&input)?;
@@ -197,6 +211,13 @@ fn main() -> anyhow::Result<()> {
     }
 
     Ok(())
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq, ValueEnum)]
+enum CheckStage {
+    Syntax,
+    Semantic,
+    Rust,
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -434,14 +455,46 @@ fn resolve_import_path(
 }
 
 fn transpile_file(input_source: &InputSource) -> anyhow::Result<(String, crate::sourcemap::SourceMap)> {
-    let program = parse_source(&input_source.content)?;
-    validate_program(&input_source.content, &program)?;
+    let program = parse_and_validate_program(input_source)?;
     let transpiler = Transpiler::new();
     Ok(transpiler.transpile(
         &program,
         &input_source.content,
         &input_source.line_origins,
     ))
+}
+
+fn check_syntax_input(input: &Path) -> anyhow::Result<()> {
+    if input.is_file() {
+        let source = fs::read_to_string(input)?;
+        parse_source(&source)?;
+        return Ok(());
+    }
+
+    if input.is_dir() {
+        let (_, ordered_files) = resolve_project_graph(input)?;
+        for file in ordered_files {
+            let source = fs::read_to_string(&file)?;
+            parse_source(&source)
+                .map_err(|err| anyhow::anyhow!("{}: {}", file.display(), err))?;
+        }
+        return Ok(());
+    }
+
+    anyhow::bail!(
+        "input path '{}' is neither a file nor a directory",
+        input.display()
+    )
+}
+
+fn validate_input_semantics(input_source: &InputSource) -> anyhow::Result<()> {
+    parse_and_validate_program(input_source).map(|_| ())
+}
+
+fn parse_and_validate_program(input_source: &InputSource) -> anyhow::Result<crate::ast::Program> {
+    let program = parse_source(&input_source.content)?;
+    validate_program(&input_source.content, &program)?;
+    Ok(program)
 }
 
 fn format_source(input_content: &str) -> anyhow::Result<String> {

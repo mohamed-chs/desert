@@ -47,10 +47,10 @@ The design priority is explicit semantics with predictable lowering. Syntax that
 ## CLI
 
 - `desert transpile <file.ds> [-o file.rs]`
-- `desert check <file.ds>`
+- `desert check <file.ds> [--stage syntax|semantic|rust]`
 - `desert run <file.ds> [-- args...]`
 - `desert transpile <project_dir>` with `desert.toml`/`Desert.toml` (`[package].entry`, default `src/main.ds`)
-- `desert check <project_dir>` with the same project entry resolution
+- `desert check <project_dir> [--stage syntax|semantic|rust]` with the same project entry resolution
 - `desert run <project_dir> [-- args...]` with the same project entry resolution
 - `desert new <path> [--force]` to scaffold `desert.toml` and `src/main.ds`
 - `desert fmt <file_or_dir> [--check]` to apply/enforce canonical Desert formatting

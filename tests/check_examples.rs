@@ -89,6 +89,57 @@ fn check_reports_parser_errors_with_location() {
 }
 
 #[test]
+fn check_stage_syntax_reports_parser_errors_with_location() {
+    let mut cmd = cargo_bin_cmd!("desert");
+    cmd.arg("check")
+        .arg("--stage")
+        .arg("syntax")
+        .arg("tests/fixtures/check_fail_parse_missing_colon.ds");
+    cmd.assert()
+        .failure()
+        .stderr(predicates::str::contains(
+            "Parsing error at line 1, column 1",
+        ))
+        .stderr(predicates::str::contains("near token Def"));
+}
+
+#[test]
+fn check_stage_syntax_allows_semantic_error_fixture() {
+    let mut cmd = cargo_bin_cmd!("desert");
+    cmd.arg("check")
+        .arg("--stage")
+        .arg("syntax")
+        .arg("tests/fixtures/check_fail_move_requires_mut.ds");
+    cmd.assert()
+        .success()
+        .stdout(predicates::str::contains("Syntax check passed."));
+}
+
+#[test]
+fn check_stage_semantic_reports_semantic_failures() {
+    let mut cmd = cargo_bin_cmd!("desert");
+    cmd.arg("check")
+        .arg("--stage")
+        .arg("semantic")
+        .arg("tests/fixtures/check_fail_move_requires_mut.ds");
+    cmd.assert().failure().stderr(predicates::str::contains(
+        "Semantic error at line 3, column 5: `move` requires mutable binding `xs`",
+    ));
+}
+
+#[test]
+fn check_stage_semantic_skips_rust_type_checking() {
+    let mut cmd = cargo_bin_cmd!("desert");
+    cmd.arg("check")
+        .arg("--stage")
+        .arg("semantic")
+        .arg("tests/fixtures/check_fail_type_mismatch.ds");
+    cmd.assert()
+        .success()
+        .stdout(predicates::str::contains("Semantic check passed."));
+}
+
+#[test]
 fn check_reports_lexer_errors_with_location() {
     let mut cmd = cargo_bin_cmd!("desert");
     cmd.arg("check")

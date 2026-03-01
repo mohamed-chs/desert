@@ -25,7 +25,7 @@ This roadmap follows current project direction: prioritize project workflow and 
 ## Phase B: Tooling Basics (Parallel to Phase A)
 
 - Add project-graph check mode and cache-key groundwork for faster `check` loops. (Graph command done)
-- Add CI-facing commands that separate syntax, semantic prechecks, and rustc-backed checking.
+- Add CI-facing staged `check` support that separates syntax, semantic prechecks, and rustc-backed checking. (Done)
 
 ## Phase C: Diagnostics Upgrade (Staged, Optional While A/B Run)
 
