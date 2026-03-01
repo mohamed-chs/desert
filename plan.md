@@ -43,4 +43,4 @@ This roadmap follows current project direction: prioritize project workflow and 
 - Ship behavior changes first; tests/docs follow in the same pass.
 - Breaking changes remain acceptable when they reduce overlap or compiler branching.
 - Keep examples executable and checkable with current compiler behavior.
-- Recent shipped behavior: semantic `impl` conformance checks now fail fast for unknown protocol/type targets and protocol method set/signature mismatches.
+- Recent shipped behavior: file-mode import graph resolution now loads top-level `import` dependencies (with cycle detection) for `check`/`transpile`/`run`, not just project-directory inputs.

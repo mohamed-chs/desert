@@ -60,6 +60,11 @@ fn check_linked_list_example() {
 }
 
 #[test]
+fn check_imports_example() {
+    run_check("imports.ds");
+}
+
+#[test]
 fn check_match_option_example() {
     run_check("match_option.ds");
 }
@@ -288,6 +293,14 @@ fn check_reports_nested_import_requires_top_level() {
     cmd.assert().failure().stderr(predicates::str::contains(
         "Semantic error at line 2, column 5: `import` is only allowed at top level",
     ));
+}
+
+#[test]
+fn check_file_input_with_imports_resolves_symbols() {
+    let mut cmd = cargo_bin_cmd!("desert");
+    cmd.arg("check")
+        .arg("tests/fixtures/check_ok_file_import_entry.ds");
+    cmd.assert().success();
 }
 
 #[test]

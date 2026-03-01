@@ -28,7 +28,7 @@ Core quality checks currently pass:
 - Control flow: `if/else`, `for`, `match`
 - Definitions: `def`, `struct`, `protocol`, `impl`
 - Expressions: literals, calls, member access, generic calls, indexing, assignment
-- Imports: top-level `import` statements for project files
+- Imports: top-level `import` statements for both single-file and project inputs
 - Ownership/error syntax: `move`, `&`, `~`, `?`, `!!`
 - Macros: `$name(...)` with `$print` -> `println!`
 - `pyimport` blocks: parsed and emitted as Rust comments
@@ -85,6 +85,7 @@ Core quality checks currently pass:
 - Extended Rust-to-Desert diagnostic mapping to include source columns (`file:line:column`) using statement-start column tracking, and fixed transpiler line-boundary mapping for top-level statements.
 - Added semantic validation that unresolved identifiers fail fast with Desert line/column errors (`unknown identifier ...`) instead of waiting for rustc failures.
 - Added match-pattern binder predeclaration for arm scopes (for example `Some(node)`), so arm-body identifier checks recognize pattern-bound names.
+- Added file-mode import graph loading (with cycle detection) so `desert check/transpile/run path/to/file.ds` resolves top-level imported modules the same way project mode does.
 
 ## Known Gaps
 

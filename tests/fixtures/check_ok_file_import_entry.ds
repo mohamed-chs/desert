@@ -1,0 +1,5 @@
+import "check_ok_file_import_dep.ds"
+
+def main():
+    let v = plus_one(41)
+    $print("value {v}")

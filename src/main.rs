@@ -237,11 +237,7 @@ struct InputSource {
 
 fn load_input_source(input: &Path) -> anyhow::Result<InputSource> {
     if input.is_file() {
-        let content = fs::read_to_string(input)?;
-        return Ok(InputSource {
-            line_origins: line_origins_for_file(input, &content)?,
-            content,
-        });
+        return load_file_source(input);
     }
     if input.is_dir() {
         return load_project_source(input);
@@ -251,6 +247,11 @@ fn load_input_source(input: &Path) -> anyhow::Result<InputSource> {
         "input path '{}' is neither a file nor a directory",
         input.display()
     )
+}
+
+fn load_file_source(entry_file: &Path) -> anyhow::Result<InputSource> {
+    let ordered_files = resolve_file_graph(entry_file)?;
+    build_input_source(&ordered_files)
 }
 
 fn resolve_project_entry(project_root: &Path) -> anyhow::Result<PathBuf> {
@@ -287,16 +288,20 @@ fn resolve_project_entry(project_root: &Path) -> anyhow::Result<PathBuf> {
 
 fn load_project_source(project_root: &Path) -> anyhow::Result<InputSource> {
     let (_, ordered_files) = resolve_project_graph(project_root)?;
+    build_input_source(&ordered_files)
+}
+
+fn build_input_source(ordered_files: &[PathBuf]) -> anyhow::Result<InputSource> {
     let mut content = String::new();
     let mut line_origins = Vec::new();
 
     for file in ordered_files {
-        let piece = fs::read_to_string(&file)?;
+        let piece = fs::read_to_string(file)?;
         if !content.is_empty() && !content.ends_with('\n') {
             content.push('\n');
         }
         content.push_str(&piece);
-        line_origins.extend(line_origins_for_file(&file, &piece)?);
+        line_origins.extend(line_origins_for_file(file, &piece)?);
     }
 
     Ok(InputSource {
@@ -362,6 +367,78 @@ fn resolve_project_graph(project_root: &Path) -> anyhow::Result<(PathBuf, Vec<Pa
     Ok((canonical_root, ordered_files))
 }
 
+fn resolve_file_graph(entry_file: &Path) -> anyhow::Result<Vec<PathBuf>> {
+    if !entry_file.is_file() {
+        anyhow::bail!(
+            "input file '{}' does not exist as a file",
+            entry_file.display()
+        );
+    }
+
+    let canonical_entry = entry_file.canonicalize().map_err(|err| {
+        anyhow::anyhow!(
+            "failed to resolve input file '{}': {}",
+            entry_file.display(),
+            err
+        )
+    })?;
+
+    let mut visited = HashSet::new();
+    let mut loading = Vec::new();
+    let mut ordered_files = Vec::new();
+    collect_file_sources(&canonical_entry, &mut visited, &mut loading, &mut ordered_files)?;
+    Ok(ordered_files)
+}
+
+fn check_import_cycle(canonical_file: &Path, loading: &[PathBuf]) -> anyhow::Result<()> {
+    if let Some(cycle_idx) = loading.iter().position(|path| path == canonical_file) {
+        let mut cycle = loading[cycle_idx..]
+            .iter()
+            .map(|path| path.display().to_string())
+            .collect::<Vec<_>>();
+        cycle.push(canonical_file.display().to_string());
+        anyhow::bail!("import cycle detected: {}", cycle.join(" -> "));
+    }
+    Ok(())
+}
+
+fn collect_file_sources(
+    file_path: &Path,
+    visited: &mut HashSet<PathBuf>,
+    loading: &mut Vec<PathBuf>,
+    ordered_files: &mut Vec<PathBuf>,
+) -> anyhow::Result<()> {
+    let canonical_file = file_path.canonicalize().map_err(|err| {
+        anyhow::anyhow!(
+            "failed to resolve import '{}': {}",
+            file_path.display(),
+            err
+        )
+    })?;
+
+    if visited.contains(&canonical_file) {
+        return Ok(());
+    }
+
+    check_import_cycle(&canonical_file, loading)?;
+
+    let source = fs::read_to_string(&canonical_file)?;
+    loading.push(canonical_file.clone());
+    let program = parse_source(&source)?;
+
+    for stmt in &program.statements {
+        if let crate::ast::StatementKind::Import(path) = &stmt.kind {
+            let import_path = resolve_import_path(&canonical_file, path, None)?;
+            collect_file_sources(&import_path, visited, loading, ordered_files)?;
+        }
+    }
+
+    loading.pop();
+    visited.insert(canonical_file.clone());
+    ordered_files.push(canonical_file);
+    Ok(())
+}
+
 fn collect_project_sources(
     file_path: &Path,
     project_root: &Path,
@@ -389,14 +466,7 @@ fn collect_project_sources(
         return Ok(());
     }
 
-    if let Some(cycle_idx) = loading.iter().position(|path| path == &canonical_file) {
-        let mut cycle = loading[cycle_idx..]
-            .iter()
-            .map(|path| path.display().to_string())
-            .collect::<Vec<_>>();
-        cycle.push(canonical_file.display().to_string());
-        anyhow::bail!("import cycle detected: {}", cycle.join(" -> "));
-    }
+    check_import_cycle(&canonical_file, loading)?;
 
     let source = fs::read_to_string(&canonical_file)?;
     loading.push(canonical_file.clone());
@@ -404,21 +474,21 @@ fn collect_project_sources(
 
     for stmt in &program.statements {
         if let crate::ast::StatementKind::Import(path) = &stmt.kind {
-            let import_path = resolve_import_path(&canonical_file, path, project_root)?;
+            let import_path = resolve_import_path(&canonical_file, path, Some(project_root))?;
             collect_project_sources(&import_path, project_root, visited, loading, ordered_files)?;
         }
     }
 
     loading.pop();
-    visited.insert(canonical_file);
-    ordered_files.push(file_path.canonicalize()?);
+    visited.insert(canonical_file.clone());
+    ordered_files.push(canonical_file);
     Ok(())
 }
 
 fn resolve_import_path(
     current_file: &Path,
     import_path: &str,
-    project_root: &Path,
+    project_root: Option<&Path>,
 ) -> anyhow::Result<PathBuf> {
     let mut resolved = PathBuf::from(import_path);
     if resolved.extension().is_none() {
@@ -443,14 +513,16 @@ fn resolve_import_path(
         )
     })?;
 
-    if !canonical.starts_with(project_root) {
-        anyhow::bail!(
-            "import '{}' from '{}' resolves outside project root '{}': '{}'",
-            import_path,
-            current_file.display(),
-            project_root.display(),
-            canonical.display()
-        );
+    if let Some(project_root) = project_root {
+        if !canonical.starts_with(project_root) {
+            anyhow::bail!(
+                "import '{}' from '{}' resolves outside project root '{}': '{}'",
+                import_path,
+                current_file.display(),
+                project_root.display(),
+                canonical.display()
+            );
+        }
     }
     Ok(canonical)
 }
@@ -465,8 +537,11 @@ fn transpile_file(
 
 fn check_syntax_input(input: &Path) -> anyhow::Result<()> {
     if input.is_file() {
-        let source = fs::read_to_string(input)?;
-        parse_source(&source)?;
+        let ordered_files = resolve_file_graph(input)?;
+        for file in ordered_files {
+            let source = fs::read_to_string(&file)?;
+            parse_source(&source).map_err(|err| anyhow::anyhow!("{}: {}", file.display(), err))?;
+        }
         return Ok(());
     }
 
@@ -547,9 +622,9 @@ fn run_doctor(input: Option<&Path>) -> anyhow::Result<()> {
 
     if let Some(input) = input {
         if input.is_file() {
-            let source = fs::read_to_string(input)?;
-            let program = parse_source(&source)?;
-            validate_program(&source, &program)?;
+            let input_source = load_file_source(input)?;
+            let program = parse_source(&input_source.content)?;
+            validate_program(&input_source.content, &program)?;
             println!("source: ok ({})", input.display());
             return Ok(());
         }
