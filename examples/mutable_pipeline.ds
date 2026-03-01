@@ -1,0 +1,13 @@
+def scale(values: ~List[i32], factor: i32):
+    for i in [0, 1, 2]:
+        values[i] = values[i] * factor
+
+def take_first(values: ~List[i32]) -> i32:
+    return move values[0]
+
+def main():
+    mut nums = [4, 8, 12]
+    scale(~nums, 2)
+    let first = take_first(~nums)
+    $print("Taken first value: {first}")
+    $print("Remaining values: {nums}")

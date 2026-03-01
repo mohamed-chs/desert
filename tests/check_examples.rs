@@ -60,6 +60,26 @@ fn check_linked_list_example() {
 }
 
 #[test]
+fn check_match_option_example() {
+    run_check("match_option.ds");
+}
+
+#[test]
+fn check_mutable_pipeline_example() {
+    run_check("mutable_pipeline.ds");
+}
+
+#[test]
+fn check_shape_protocol_example() {
+    run_check("shape_protocol.ds");
+}
+
+#[test]
+fn check_struct_constructors_example() {
+    run_check("struct_constructors.ds");
+}
+
+#[test]
 fn check_reports_translated_diagnostics_for_type_mismatch_fixture() {
     let mut cmd = cargo_bin_cmd!("desert");
     cmd.arg("check")

@@ -1,0 +1,18 @@
+struct User:
+    name: Str
+    age: i32
+
+def find_user(id: i32) -> Option[User]:
+    if id == 1:
+        return Some(User("Nia", 28))
+    else:
+        return None
+
+def main():
+    let maybe_user = find_user(1)
+
+    match maybe_user:
+        Some(user):
+            $print("Found user {user.name} ({user.age})")
+        None:
+            $print("User not found")

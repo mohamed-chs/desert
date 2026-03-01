@@ -1,0 +1,11 @@
+struct Pair:
+    left: i32
+    right: i32
+
+def swap(pair: Pair) -> Pair:
+    return Pair(left=pair.right, right=pair.left)
+
+def main():
+    let first = Pair(10, 25)
+    let second = swap(first)
+    $print("Swapped pair: ({second.left}, {second.right})")

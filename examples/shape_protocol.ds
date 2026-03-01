@@ -1,0 +1,19 @@
+protocol Area:
+    def area(self) -> f64:
+        return 0.0
+
+struct Rectangle:
+    width: f64
+    height: f64
+
+impl Area for Rectangle:
+    def area(self) -> f64:
+        return self.width * self.height
+
+def report_area(shape: Area):
+    let value = shape.area()
+    $print("Area: {value}")
+
+def main():
+    let rect = Rectangle(width=3.0, height=2.5)
+    report_area(rect)
