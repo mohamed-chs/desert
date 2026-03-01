@@ -693,7 +693,25 @@ struct BindingInfo {
 #[derive(Debug, Default)]
 struct SemanticIndex {
     struct_names: HashSet<String>,
-    protocol_methods: HashMap<String, Vec<String>>,
+    protocol_methods: HashMap<String, ProtocolInfo>,
+}
+
+#[derive(Debug, Default)]
+struct ProtocolInfo {
+    method_order: Vec<String>,
+    methods: HashMap<String, MethodSignature>,
+}
+
+#[derive(Debug, Clone)]
+struct MethodSignature {
+    params: Vec<ParamSignature>,
+    return_ty: Option<crate::ast::Type>,
+}
+
+#[derive(Debug, Clone)]
+struct ParamSignature {
+    is_mut: bool,
+    ty: Option<crate::ast::Type>,
 }
 
 fn validate_program(input_content: &str, program: &crate::ast::Program) -> anyhow::Result<()> {
@@ -976,7 +994,6 @@ fn validate_statements(
             StatementKind::Impl {
                 for_type, methods, ..
             } => {
-                validate_impl_declaration(stmt, semantic_index)?;
                 validate_method_block_shapes(
                     methods,
                     stmt.span.start,
@@ -987,6 +1004,7 @@ fn validate_statements(
                     stmt.span.start,
                     &format!("impl for `{}`", for_type),
                 )?;
+                validate_impl_declaration(stmt, semantic_index)?;
                 validate_statements(
                     methods,
                     scopes,
@@ -1349,14 +1367,14 @@ fn validate_impl_declaration(
         return Ok(());
     };
 
-    let Some(required_methods) = semantic_index.protocol_methods.get(protocol_name) else {
+    let Some(protocol_info) = semantic_index.protocol_methods.get(protocol_name) else {
         return Err(SemanticError {
             offset: stmt.span.start,
             message: format!("impl references unknown protocol `{}`", protocol_name),
         });
     };
 
-    let required_set: HashSet<&str> = required_methods.iter().map(String::as_str).collect();
+    let required_set: HashSet<&str> = protocol_info.method_order.iter().map(String::as_str).collect();
     let mut provided = HashSet::new();
     for method in methods {
         if let crate::ast::StatementKind::Def { name, .. } = &method.kind {
@@ -1370,10 +1388,26 @@ fn validate_impl_declaration(
                     ),
                 });
             }
+
+            let Some(required_signature) = protocol_info.methods.get(name) else {
+                continue;
+            };
+            let actual_signature = method_signature_from_statement(method);
+            if let Some(reason) = validate_method_signature_match(required_signature, &actual_signature)
+            {
+                return Err(SemanticError {
+                    offset: method.span.start.max(stmt.span.start),
+                    message: format!(
+                        "impl for protocol `{}` on `{}` has incompatible signature for method `{}`: {}",
+                        protocol_name, for_type, name, reason
+                    ),
+                });
+            }
         }
     }
 
-    let missing: Vec<&str> = required_methods
+    let missing: Vec<&str> = protocol_info
+        .method_order
         .iter()
         .map(String::as_str)
         .filter(|name| !provided.contains(name))
@@ -1391,6 +1425,58 @@ fn validate_impl_declaration(
     }
 
     Ok(())
+}
+
+fn validate_method_signature_match(
+    expected: &MethodSignature,
+    actual: &MethodSignature,
+) -> Option<String> {
+    if expected.params.len() != actual.params.len() {
+        return Some(format!(
+            "expected {} parameter(s), found {}",
+            expected.params.len(),
+            actual.params.len()
+        ));
+    }
+
+    for (idx, (expected_param, actual_param)) in
+        expected.params.iter().zip(&actual.params).enumerate()
+    {
+        let position = idx + 1;
+        if expected_param.is_mut != actual_param.is_mut {
+            return Some(format!(
+                "parameter {} mutability mismatch (expected `{}`, found `{}`)",
+                position,
+                if expected_param.is_mut { "mut" } else { "non-mut" },
+                if actual_param.is_mut { "mut" } else { "non-mut" }
+            ));
+        }
+        if expected_param.ty != actual_param.ty {
+            return Some(format!(
+                "parameter {} type mismatch (expected `{}`, found `{}`)",
+                position,
+                format_optional_type(expected_param.ty.as_ref()),
+                format_optional_type(actual_param.ty.as_ref())
+            ));
+        }
+    }
+
+    if expected.return_ty != actual.return_ty {
+        return Some(format!(
+            "return type mismatch (expected `{}`, found `{}`)",
+            format_optional_type(expected.return_ty.as_ref()),
+            format_optional_type(actual.return_ty.as_ref())
+        ));
+    }
+
+    None
+}
+
+fn format_optional_type(ty: Option<&crate::ast::Type>) -> String {
+    match ty {
+        Some(value) => format!("{:?}", value),
+        None => "unspecified".to_string(),
+    }
 }
 
 fn validate_constructor_call(
@@ -1539,17 +1625,39 @@ fn collect_semantic_index(program: &crate::ast::Program) -> SemanticIndex {
                 index.struct_names.insert(name.clone());
             }
             crate::ast::StatementKind::Protocol { name, methods } => {
-                let method_names = methods
-                    .iter()
-                    .filter_map(|method| match &method.kind {
-                        crate::ast::StatementKind::Def { name, .. } => Some(name.clone()),
-                        _ => None,
-                    })
-                    .collect();
-                index.protocol_methods.insert(name.clone(), method_names);
+                let mut info = ProtocolInfo::default();
+                for method in methods {
+                    if let crate::ast::StatementKind::Def { name, .. } = &method.kind {
+                        info.method_order.push(name.clone());
+                        info.methods
+                            .insert(name.clone(), method_signature_from_statement(method));
+                    }
+                }
+                index.protocol_methods.insert(name.clone(), info);
             }
             _ => {}
         }
     }
     index
+}
+
+fn method_signature_from_statement(stmt: &crate::ast::Statement) -> MethodSignature {
+    match &stmt.kind {
+        crate::ast::StatementKind::Def {
+            params, return_ty, ..
+        } => MethodSignature {
+            params: params
+                .iter()
+                .map(|param| ParamSignature {
+                    is_mut: param.is_mut,
+                    ty: param.ty.clone(),
+                })
+                .collect(),
+            return_ty: return_ty.clone(),
+        },
+        _ => MethodSignature {
+            params: Vec::new(),
+            return_ty: None,
+        },
+    }
 }

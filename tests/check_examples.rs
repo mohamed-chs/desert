@@ -350,6 +350,36 @@ fn check_reports_impl_protocol_missing_method() {
 }
 
 #[test]
+fn check_reports_impl_protocol_parameter_count_mismatch() {
+    let mut cmd = cargo_bin_cmd!("desert");
+    cmd.arg("check")
+        .arg("tests/fixtures/check_fail_impl_protocol_param_count.ds");
+    cmd.assert().failure().stderr(predicates::str::contains(
+        "incompatible signature for method `add`: expected 3 parameter(s), found 2",
+    ));
+}
+
+#[test]
+fn check_reports_impl_protocol_parameter_mutability_mismatch() {
+    let mut cmd = cargo_bin_cmd!("desert");
+    cmd.arg("check")
+        .arg("tests/fixtures/check_fail_impl_protocol_mutability_mismatch.ds");
+    cmd.assert().failure().stderr(predicates::str::contains(
+        "incompatible signature for method `bump`: parameter 1 mutability mismatch",
+    ));
+}
+
+#[test]
+fn check_reports_impl_protocol_return_type_mismatch() {
+    let mut cmd = cargo_bin_cmd!("desert");
+    cmd.arg("check")
+        .arg("tests/fixtures/check_fail_impl_protocol_return_type_mismatch.ds");
+    cmd.assert().failure().stderr(predicates::str::contains(
+        "incompatible signature for method `label`: return type mismatch",
+    ));
+}
+
+#[test]
 fn check_reports_method_resolution_failure_with_desert_line_mapping() {
     let mut cmd = cargo_bin_cmd!("desert");
     cmd.arg("check")

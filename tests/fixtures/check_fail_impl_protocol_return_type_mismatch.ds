@@ -1,0 +1,10 @@
+protocol Make:
+    def label(self) -> Str:
+        return ""
+
+struct Item:
+    id: i32
+
+impl Make for Item:
+    def label(self) -> i32:
+        return 0

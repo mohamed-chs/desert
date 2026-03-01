@@ -1,0 +1,10 @@
+protocol Bump:
+    def bump(mut self):
+        return
+
+struct Counter:
+    value: i32
+
+impl Bump for Counter:
+    def bump(self):
+        return

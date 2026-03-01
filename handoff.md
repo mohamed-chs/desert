@@ -80,7 +80,7 @@ Core quality checks currently pass:
 - Added semantic validation that rejects top-level name collisions across declaration kinds (for example `def Foo` and `struct Foo`) before Rust lowering.
 - Added semantic validation that rejects duplicate method names within an `impl` or `protocol` block before Rust lowering.
 - Added semantic validation that rejects non-`def` statements inside `impl`/`protocol` bodies before Rust lowering.
-- Added semantic validation that `impl` targets must name declared `struct`s, `impl Protocol for Type` must name a declared `protocol`, and protocol impl methods must match the protocol method set (reject unknown/missing methods) before Rust lowering.
+- Added semantic validation that `impl` targets must name declared `struct`s, `impl Protocol for Type` must name a declared `protocol`, and protocol impl methods must match the protocol method set/signatures (reject unknown/missing methods and signature mismatches) before Rust lowering.
 
 ## Known Gaps
 
