@@ -123,7 +123,7 @@ fn main() -> anyhow::Result<()> {
 
                 println!("Check passed.");
             }
-        }
+        },
         Commands::Run { input, args } => {
             let input_source = load_input_source(&input)?;
             let (rust_code, source_map) = transpile_file(&input_source)?;
@@ -455,14 +455,12 @@ fn resolve_import_path(
     Ok(canonical)
 }
 
-fn transpile_file(input_source: &InputSource) -> anyhow::Result<(String, crate::sourcemap::SourceMap)> {
+fn transpile_file(
+    input_source: &InputSource,
+) -> anyhow::Result<(String, crate::sourcemap::SourceMap)> {
     let program = parse_and_validate_program(input_source)?;
     let transpiler = Transpiler::new();
-    Ok(transpiler.transpile(
-        &program,
-        &input_source.content,
-        &input_source.line_origins,
-    ))
+    Ok(transpiler.transpile(&program, &input_source.content, &input_source.line_origins))
 }
 
 fn check_syntax_input(input: &Path) -> anyhow::Result<()> {
@@ -476,8 +474,7 @@ fn check_syntax_input(input: &Path) -> anyhow::Result<()> {
         let (_, ordered_files) = resolve_project_graph(input)?;
         for file in ordered_files {
             let source = fs::read_to_string(&file)?;
-            parse_source(&source)
-                .map_err(|err| anyhow::anyhow!("{}: {}", file.display(), err))?;
+            parse_source(&source).map_err(|err| anyhow::anyhow!("{}: {}", file.display(), err))?;
         }
         return Ok(());
     }
@@ -896,7 +893,13 @@ fn validate_statements(
                         message: format!("duplicate local binding `{}` in same scope", name),
                     });
                 }
-                validate_expression(value, stmt.span.start, scopes, struct_fields)?;
+                validate_expression(
+                    value,
+                    stmt.span.start,
+                    scopes,
+                    semantic_index,
+                    struct_fields,
+                )?;
                 declare_binding(
                     scopes,
                     name,
@@ -913,7 +916,13 @@ fn validate_statements(
                         message: format!("duplicate local binding `{}` in same scope", name),
                     });
                 }
-                validate_expression(value, stmt.span.start, scopes, struct_fields)?;
+                validate_expression(
+                    value,
+                    stmt.span.start,
+                    scopes,
+                    semantic_index,
+                    struct_fields,
+                )?;
                 declare_binding(
                     scopes,
                     name,
@@ -964,7 +973,13 @@ fn validate_statements(
                 then_block,
                 else_block,
             } => {
-                validate_expression(condition, stmt.span.start, scopes, struct_fields)?;
+                validate_expression(
+                    condition,
+                    stmt.span.start,
+                    scopes,
+                    semantic_index,
+                    struct_fields,
+                )?;
                 scopes.push(HashMap::new());
                 validate_statements(
                     then_block,
@@ -995,7 +1010,13 @@ fn validate_statements(
                 iterable,
                 body,
             } => {
-                validate_expression(iterable, stmt.span.start, scopes, struct_fields)?;
+                validate_expression(
+                    iterable,
+                    stmt.span.start,
+                    scopes,
+                    semantic_index,
+                    struct_fields,
+                )?;
                 scopes.push(HashMap::new());
                 declare_binding(
                     scopes,
@@ -1017,10 +1038,43 @@ fn validate_statements(
                 scopes.pop();
             }
             StatementKind::Match { expression, arms } => {
-                validate_expression(expression, stmt.span.start, scopes, struct_fields)?;
+                validate_expression(
+                    expression,
+                    stmt.span.start,
+                    scopes,
+                    semantic_index,
+                    struct_fields,
+                )?;
                 for (pattern, body) in arms {
-                    validate_expression(pattern, stmt.span.start, scopes, struct_fields)?;
                     scopes.push(HashMap::new());
+                    let pattern_bindings =
+                        collect_pattern_bindings(pattern, scopes, semantic_index);
+                    for binding in pattern_bindings {
+                        if current_scope_contains(scopes, &binding) {
+                            return Err(SemanticError {
+                                offset: stmt.span.start,
+                                message: format!(
+                                    "duplicate match pattern binding `{}` in same arm",
+                                    binding
+                                ),
+                            });
+                        }
+                        declare_binding(
+                            scopes,
+                            &binding,
+                            BindingInfo {
+                                is_mut: false,
+                                can_write_through: false,
+                            },
+                        );
+                    }
+                    validate_expression(
+                        pattern,
+                        stmt.span.start,
+                        scopes,
+                        semantic_index,
+                        struct_fields,
+                    )?;
                     validate_statements(
                         body,
                         scopes,
@@ -1040,10 +1094,10 @@ fn validate_statements(
                         message: "`return` is only allowed inside `def` bodies".to_string(),
                     });
                 }
-                validate_expression(expr, stmt.span.start, scopes, struct_fields)?;
+                validate_expression(expr, stmt.span.start, scopes, semantic_index, struct_fields)?;
             }
             StatementKind::Expr(expr) => {
-                validate_expression(expr, stmt.span.start, scopes, struct_fields)?;
+                validate_expression(expr, stmt.span.start, scopes, semantic_index, struct_fields)?;
             }
             StatementKind::Impl {
                 for_type, methods, ..
@@ -1130,59 +1184,79 @@ fn validate_expression(
     expr: &crate::ast::Expression,
     offset: usize,
     scopes: &[HashMap<String, BindingInfo>],
+    semantic_index: &SemanticIndex,
     struct_fields: &HashMap<String, Vec<String>>,
 ) -> Result<(), SemanticError> {
     use crate::ast::Expression;
     match expr {
         Expression::BinaryOp(left, crate::ast::BinaryOp::Assign, right) => {
-            validate_assignment_target(left, offset, scopes, struct_fields)?;
-            validate_expression(right, offset, scopes, struct_fields)
+            validate_assignment_target(left, offset, scopes, semantic_index, struct_fields)?;
+            validate_expression(right, offset, scopes, semantic_index, struct_fields)
         }
         Expression::BinaryOp(left, _, right) => {
-            validate_expression(left, offset, scopes, struct_fields)?;
-            validate_expression(right, offset, scopes, struct_fields)
+            validate_expression(left, offset, scopes, semantic_index, struct_fields)?;
+            validate_expression(right, offset, scopes, semantic_index, struct_fields)
         }
         Expression::Call(callee, args) => {
-            validate_expression(callee, offset, scopes, struct_fields)?;
+            validate_expression(callee, offset, scopes, semantic_index, struct_fields)?;
             if let Some(struct_name) = constructor_name(callee, struct_fields) {
-                validate_constructor_call(struct_name, args, offset, scopes, struct_fields)?;
+                validate_constructor_call(
+                    struct_name,
+                    args,
+                    offset,
+                    scopes,
+                    semantic_index,
+                    struct_fields,
+                )?;
             } else {
                 for arg in args {
-                    validate_expression(arg, offset, scopes, struct_fields)?;
+                    validate_expression(arg, offset, scopes, semantic_index, struct_fields)?;
                 }
             }
             Ok(())
         }
         Expression::GenericCall(callee, _, args) => {
-            validate_expression(callee, offset, scopes, struct_fields)?;
+            validate_expression(callee, offset, scopes, semantic_index, struct_fields)?;
             for arg in args {
-                validate_expression(arg, offset, scopes, struct_fields)?;
+                validate_expression(arg, offset, scopes, semantic_index, struct_fields)?;
             }
             Ok(())
         }
         Expression::MacroCall(_, args) | Expression::Literal(crate::ast::Literal::List(args)) => {
             for arg in args {
-                validate_expression(arg, offset, scopes, struct_fields)?;
+                validate_expression(arg, offset, scopes, semantic_index, struct_fields)?;
             }
             Ok(())
         }
         Expression::Move(inner) => {
             validate_mutable_binding(inner, scopes, "move", offset)?;
-            validate_expression(inner, offset, scopes, struct_fields)
+            validate_expression(inner, offset, scopes, semantic_index, struct_fields)
         }
         Expression::UniqueRef(inner) => {
             validate_mutable_binding(inner, scopes, "~", offset)?;
-            validate_expression(inner, offset, scopes, struct_fields)
+            validate_expression(inner, offset, scopes, semantic_index, struct_fields)
         }
         Expression::MemberAccess(inner, _)
         | Expression::SharedRef(inner)
         | Expression::Question(inner)
-        | Expression::Unwrap(inner) => validate_expression(inner, offset, scopes, struct_fields),
-        Expression::Index(inner, index) => {
-            validate_expression(inner, offset, scopes, struct_fields)?;
-            validate_expression(index, offset, scopes, struct_fields)
+        | Expression::Unwrap(inner) => {
+            validate_expression(inner, offset, scopes, semantic_index, struct_fields)
         }
-        Expression::Literal(_) | Expression::Ident(_) => Ok(()),
+        Expression::Index(inner, index) => {
+            validate_expression(inner, offset, scopes, semantic_index, struct_fields)?;
+            validate_expression(index, offset, scopes, semantic_index, struct_fields)
+        }
+        Expression::Ident(name) => {
+            if is_resolvable_ident(name, scopes, semantic_index) {
+                Ok(())
+            } else {
+                Err(SemanticError {
+                    offset,
+                    message: format!("unknown identifier `{}`", name),
+                })
+            }
+        }
+        Expression::Literal(_) => Ok(()),
     }
 }
 
@@ -1259,6 +1333,7 @@ fn validate_assignment_target(
     expr: &crate::ast::Expression,
     offset: usize,
     scopes: &[HashMap<String, BindingInfo>],
+    semantic_index: &SemanticIndex,
     struct_fields: &HashMap<String, Vec<String>>,
 ) -> Result<(), SemanticError> {
     if !is_place_expression(expr) {
@@ -1270,7 +1345,7 @@ fn validate_assignment_target(
         });
     }
 
-    validate_place_subexpressions(expr, offset, scopes, struct_fields)?;
+    validate_place_subexpressions(expr, offset, scopes, semantic_index, struct_fields)?;
 
     let Some(root) = place_root_ident(expr) else {
         return Err(SemanticError {
@@ -1311,15 +1386,16 @@ fn validate_place_subexpressions(
     expr: &crate::ast::Expression,
     offset: usize,
     scopes: &[HashMap<String, BindingInfo>],
+    semantic_index: &SemanticIndex,
     struct_fields: &HashMap<String, Vec<String>>,
 ) -> Result<(), SemanticError> {
     match expr {
         crate::ast::Expression::MemberAccess(inner, _) => {
-            validate_place_subexpressions(inner, offset, scopes, struct_fields)
+            validate_place_subexpressions(inner, offset, scopes, semantic_index, struct_fields)
         }
         crate::ast::Expression::Index(inner, index) => {
-            validate_place_subexpressions(inner, offset, scopes, struct_fields)?;
-            validate_expression(index, offset, scopes, struct_fields)
+            validate_place_subexpressions(inner, offset, scopes, semantic_index, struct_fields)?;
+            validate_expression(index, offset, scopes, semantic_index, struct_fields)
         }
         crate::ast::Expression::Ident(_) => Ok(()),
         _ => Err(SemanticError {
@@ -1384,10 +1460,7 @@ fn validate_method_block_shapes(
         if !matches!(method.kind, crate::ast::StatementKind::Def { .. }) {
             return Err(SemanticError {
                 offset: method.span.start.max(fallback_offset),
-                message: format!(
-                    "{} can only contain `def` method declarations",
-                    owner_label
-                ),
+                message: format!("{} can only contain `def` method declarations", owner_label),
             });
         }
     }
@@ -1410,10 +1483,7 @@ fn validate_impl_declaration(
     if !semantic_index.struct_names.contains(for_type) {
         return Err(SemanticError {
             offset: stmt.span.start,
-            message: format!(
-                "impl target `{}` must be a declared struct",
-                for_type
-            ),
+            message: format!("impl target `{}` must be a declared struct", for_type),
         });
     }
 
@@ -1428,7 +1498,11 @@ fn validate_impl_declaration(
         });
     };
 
-    let required_set: HashSet<&str> = protocol_info.method_order.iter().map(String::as_str).collect();
+    let required_set: HashSet<&str> = protocol_info
+        .method_order
+        .iter()
+        .map(String::as_str)
+        .collect();
     let mut provided = HashSet::new();
     for method in methods {
         if let crate::ast::StatementKind::Def { name, .. } = &method.kind {
@@ -1447,7 +1521,8 @@ fn validate_impl_declaration(
                 continue;
             };
             let actual_signature = method_signature_from_statement(method);
-            if let Some(reason) = validate_method_signature_match(required_signature, &actual_signature)
+            if let Some(reason) =
+                validate_method_signature_match(required_signature, &actual_signature)
             {
                 return Err(SemanticError {
                     offset: method.span.start.max(stmt.span.start),
@@ -1501,8 +1576,16 @@ fn validate_method_signature_match(
             return Some(format!(
                 "parameter {} mutability mismatch (expected `{}`, found `{}`)",
                 position,
-                if expected_param.is_mut { "mut" } else { "non-mut" },
-                if actual_param.is_mut { "mut" } else { "non-mut" }
+                if expected_param.is_mut {
+                    "mut"
+                } else {
+                    "non-mut"
+                },
+                if actual_param.is_mut {
+                    "mut"
+                } else {
+                    "non-mut"
+                }
             ));
         }
         if expected_param.ty != actual_param.ty {
@@ -1538,6 +1621,7 @@ fn validate_constructor_call(
     args: &[crate::ast::Expression],
     offset: usize,
     scopes: &[HashMap<String, BindingInfo>],
+    semantic_index: &SemanticIndex,
     struct_fields: &HashMap<String, Vec<String>>,
 ) -> Result<(), SemanticError> {
     let Some(fields) = struct_fields.get(struct_name) else {
@@ -1573,12 +1657,12 @@ fn validate_constructor_call(
                     ),
                 });
             }
-            validate_expression(value, offset, scopes, struct_fields)?;
+            validate_expression(value, offset, scopes, semantic_index, struct_fields)?;
             continue;
         }
 
         positional_count += 1;
-        validate_expression(arg, offset, scopes, struct_fields)?;
+        validate_expression(arg, offset, scopes, semantic_index, struct_fields)?;
     }
 
     let available_positional = fields.len().saturating_sub(named_fields.len());
@@ -1646,6 +1730,72 @@ fn lookup_binding<'a>(
     scopes.iter().rev().find_map(|scope| scope.get(name))
 }
 
+fn is_resolvable_ident(
+    name: &str,
+    scopes: &[HashMap<String, BindingInfo>],
+    semantic_index: &SemanticIndex,
+) -> bool {
+    lookup_binding(name, scopes).is_some()
+        || semantic_index.struct_names.contains(name)
+        || crate::resolver::BUILTIN_TYPE_SYMBOLS.contains(&name)
+        || crate::resolver::BUILTIN_VALUE_SYMBOLS.contains(&name)
+}
+
+fn collect_pattern_bindings(
+    expr: &crate::ast::Expression,
+    scopes: &[HashMap<String, BindingInfo>],
+    semantic_index: &SemanticIndex,
+) -> HashSet<String> {
+    let mut bindings = HashSet::new();
+    collect_pattern_bindings_inner(expr, scopes, semantic_index, &mut bindings);
+    bindings
+}
+
+fn collect_pattern_bindings_inner(
+    expr: &crate::ast::Expression,
+    scopes: &[HashMap<String, BindingInfo>],
+    semantic_index: &SemanticIndex,
+    bindings: &mut HashSet<String>,
+) {
+    match expr {
+        crate::ast::Expression::Ident(name) => {
+            if !is_resolvable_ident(name, scopes, semantic_index) {
+                bindings.insert(name.clone());
+            }
+        }
+        crate::ast::Expression::BinaryOp(left, _, right) => {
+            collect_pattern_bindings_inner(left, scopes, semantic_index, bindings);
+            collect_pattern_bindings_inner(right, scopes, semantic_index, bindings);
+        }
+        crate::ast::Expression::Call(callee, args)
+        | crate::ast::Expression::GenericCall(callee, _, args) => {
+            collect_pattern_bindings_inner(callee, scopes, semantic_index, bindings);
+            for arg in args {
+                collect_pattern_bindings_inner(arg, scopes, semantic_index, bindings);
+            }
+        }
+        crate::ast::Expression::MacroCall(_, args)
+        | crate::ast::Expression::Literal(crate::ast::Literal::List(args)) => {
+            for arg in args {
+                collect_pattern_bindings_inner(arg, scopes, semantic_index, bindings);
+            }
+        }
+        crate::ast::Expression::MemberAccess(inner, _)
+        | crate::ast::Expression::Move(inner)
+        | crate::ast::Expression::SharedRef(inner)
+        | crate::ast::Expression::UniqueRef(inner)
+        | crate::ast::Expression::Question(inner)
+        | crate::ast::Expression::Unwrap(inner) => {
+            collect_pattern_bindings_inner(inner, scopes, semantic_index, bindings);
+        }
+        crate::ast::Expression::Index(inner, index) => {
+            collect_pattern_bindings_inner(inner, scopes, semantic_index, bindings);
+            collect_pattern_bindings_inner(index, scopes, semantic_index, bindings);
+        }
+        crate::ast::Expression::Literal(_) => {}
+    }
+}
+
 fn expression_is_unique_ref(expr: &crate::ast::Expression) -> bool {
     matches!(expr, crate::ast::Expression::UniqueRef(_))
 }
@@ -1664,7 +1814,10 @@ fn collect_struct_fields(program: &crate::ast::Program) -> HashMap<String, Vec<S
         {
             fields.insert(
                 name.clone(),
-                struct_fields.iter().map(|field| field.name.clone()).collect(),
+                struct_fields
+                    .iter()
+                    .map(|field| field.name.clone())
+                    .collect(),
             );
         }
     }

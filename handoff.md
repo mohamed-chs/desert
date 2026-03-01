@@ -83,6 +83,8 @@ Core quality checks currently pass:
 - Added semantic validation that rejects non-`def` statements inside `impl`/`protocol` bodies before Rust lowering.
 - Added semantic validation that `impl` targets must name declared `struct`s, `impl Protocol for Type` must name a declared `protocol`, and protocol impl methods must match the protocol method set/signatures (reject unknown/missing methods and signature mismatches) before Rust lowering.
 - Extended Rust-to-Desert diagnostic mapping to include source columns (`file:line:column`) using statement-start column tracking, and fixed transpiler line-boundary mapping for top-level statements.
+- Added semantic validation that unresolved identifiers fail fast with Desert line/column errors (`unknown identifier ...`) instead of waiting for rustc failures.
+- Added match-pattern binder predeclaration for arm scopes (for example `Some(node)`), so arm-body identifier checks recognize pattern-bound names.
 
 ## Known Gaps
 

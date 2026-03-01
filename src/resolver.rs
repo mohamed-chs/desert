@@ -2,6 +2,11 @@ use std::collections::HashSet;
 
 use crate::ast::Expression;
 
+pub const BUILTIN_TYPE_SYMBOLS: &[&str] = &[
+    "i32", "i64", "f32", "f64", "bool", "Str", "List", "Dict", "Box",
+];
+pub const BUILTIN_VALUE_SYMBOLS: &[&str] = &["Some", "None", "Ok", "Err", "true", "false"];
+
 pub struct Resolver {
     type_names: HashSet<String>,
     scopes: Vec<HashSet<String>>,
@@ -11,15 +16,9 @@ impl Resolver {
     pub fn new() -> Self {
         let mut type_names = HashSet::new();
         // Add built-in types
-        type_names.insert("i32".to_string());
-        type_names.insert("i64".to_string());
-        type_names.insert("f32".to_string());
-        type_names.insert("f64".to_string());
-        type_names.insert("bool".to_string());
-        type_names.insert("Str".to_string());
-        type_names.insert("List".to_string());
-        type_names.insert("Dict".to_string());
-        type_names.insert("Box".to_string());
+        for symbol in BUILTIN_TYPE_SYMBOLS {
+            type_names.insert((*symbol).to_string());
+        }
 
         Self {
             type_names,

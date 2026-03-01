@@ -301,6 +301,16 @@ fn check_reports_duplicate_local_binding_in_same_scope() {
 }
 
 #[test]
+fn check_reports_unknown_identifier_in_expression() {
+    let mut cmd = cargo_bin_cmd!("desert");
+    cmd.arg("check")
+        .arg("tests/fixtures/check_fail_unknown_identifier.ds");
+    cmd.assert().failure().stderr(predicates::str::contains(
+        "Semantic error at line 2, column 5: unknown identifier `missing`",
+    ));
+}
+
+#[test]
 fn check_reports_duplicate_local_def_in_same_scope() {
     let mut cmd = cargo_bin_cmd!("desert");
     cmd.arg("check")
@@ -613,7 +623,11 @@ fn new_rejects_non_empty_directory_without_force() {
 #[test]
 fn fmt_rewrites_unformatted_file() {
     let file = unique_temp_path("desert_fmt_file").with_extension("ds");
-    fs::write(&file, "def main():\n    mut x=1\n    if x>0:\n        $print(\"ok\")\n").unwrap();
+    fs::write(
+        &file,
+        "def main():\n    mut x=1\n    if x>0:\n        $print(\"ok\")\n",
+    )
+    .unwrap();
 
     let mut cmd = cargo_bin_cmd!("desert");
     cmd.arg("fmt").arg(&file);
