@@ -739,6 +739,18 @@ fn validate_statements(
                 );
             }
             StatementKind::Def { params, body, .. } => {
+                let mut seen_params = HashSet::new();
+                for param in params {
+                    if !seen_params.insert(param.name.as_str()) {
+                        return Err(SemanticError {
+                            offset: stmt.span.start,
+                            message: format!(
+                                "duplicate parameter `{}` in function signature",
+                                param.name
+                            ),
+                        });
+                    }
+                }
                 scopes.push(HashMap::new());
                 for param in params {
                     declare_binding(

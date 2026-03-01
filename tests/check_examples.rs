@@ -230,6 +230,16 @@ fn check_reports_return_outside_def() {
 }
 
 #[test]
+fn check_reports_duplicate_function_parameters() {
+    let mut cmd = cargo_bin_cmd!("desert");
+    cmd.arg("check")
+        .arg("tests/fixtures/check_fail_duplicate_params.ds");
+    cmd.assert().failure().stderr(predicates::str::contains(
+        "Semantic error at line 1, column 1: duplicate parameter `x` in function signature",
+    ));
+}
+
+#[test]
 fn check_reports_method_resolution_failure_with_desert_line_mapping() {
     let mut cmd = cargo_bin_cmd!("desert");
     cmd.arg("check")
