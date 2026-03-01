@@ -35,6 +35,7 @@ The design priority is explicit semantics with predictable lowering. Syntax that
 - Local bindings:
   - `let`/`mut` redeclaration of the same name in a single block scope is rejected during semantic validation
   - Local `def` names must also be unique within a single block scope and cannot collide with already-declared local names
+  - Calls to declared `def` names are arity-checked during semantic validation (including forward local defs and generic-call syntax)
   - Unresolved identifiers now fail during semantic validation (`unknown identifier ...`) instead of deferring to rustc, while preserving built-in enum/bool value symbols and declared type receivers
 - Match arm patterns:
   - Pattern binders (for example `Some(node)`) are introduced into the corresponding arm scope before body validation

@@ -344,6 +344,36 @@ fn check_reports_unknown_identifier_in_expression() {
 }
 
 #[test]
+fn check_reports_top_level_function_call_arity_mismatch() {
+    let mut cmd = cargo_bin_cmd!("desert");
+    cmd.arg("check")
+        .arg("tests/fixtures/check_fail_call_arity_top_level.ds");
+    cmd.assert().failure().stderr(predicates::str::contains(
+        "Semantic error at line 5, column 5: call to `add` expects 2 argument(s), found 1",
+    ));
+}
+
+#[test]
+fn check_reports_local_forward_function_call_arity_mismatch() {
+    let mut cmd = cargo_bin_cmd!("desert");
+    cmd.arg("check")
+        .arg("tests/fixtures/check_fail_call_arity_local_forward.ds");
+    cmd.assert().failure().stderr(predicates::str::contains(
+        "Semantic error at line 2, column 5: call to `helper` expects 1 argument(s), found 2",
+    ));
+}
+
+#[test]
+fn check_reports_generic_function_call_arity_mismatch() {
+    let mut cmd = cargo_bin_cmd!("desert");
+    cmd.arg("check")
+        .arg("tests/fixtures/check_fail_call_arity_generic.ds");
+    cmd.assert().failure().stderr(predicates::str::contains(
+        "Semantic error at line 5, column 5: call to `id` expects 1 argument(s), found 2",
+    ));
+}
+
+#[test]
 fn check_reports_duplicate_local_def_in_same_scope() {
     let mut cmd = cargo_bin_cmd!("desert");
     cmd.arg("check")

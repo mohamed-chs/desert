@@ -1,0 +1,5 @@
+def id(x: i32) -> i32:
+    return x
+
+def main():
+    let value = id[i32](1, 2)

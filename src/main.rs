@@ -814,6 +814,7 @@ struct SemanticError {
 struct BindingInfo {
     is_mut: bool,
     can_write_through: bool,
+    callable_arity: Option<usize>,
 }
 
 #[derive(Debug, Default)]
@@ -981,6 +982,7 @@ fn validate_statements(
                     BindingInfo {
                         is_mut: false,
                         can_write_through: expression_is_unique_ref(value),
+                        callable_arity: None,
                     },
                 );
             }
@@ -1004,6 +1006,7 @@ fn validate_statements(
                     BindingInfo {
                         is_mut: true,
                         can_write_through: true,
+                        callable_arity: None,
                     },
                 );
             }
@@ -1029,6 +1032,7 @@ fn validate_statements(
                             is_mut: param.is_mut,
                             can_write_through: param.is_mut
                                 || param.ty.as_ref().is_some_and(type_is_unique_ref),
+                            callable_arity: None,
                         },
                     );
                 }
@@ -1099,6 +1103,7 @@ fn validate_statements(
                     BindingInfo {
                         is_mut: false,
                         can_write_through: false,
+                        callable_arity: None,
                     },
                 );
                 validate_statements(
@@ -1140,6 +1145,7 @@ fn validate_statements(
                             BindingInfo {
                                 is_mut: false,
                                 can_write_through: false,
+                                callable_arity: None,
                             },
                         );
                     }
@@ -1284,6 +1290,7 @@ fn validate_expression(
                     struct_fields,
                 )?;
             } else {
+                validate_declared_call_arity(callee, args.len(), offset, scopes)?;
                 for arg in args {
                     validate_expression(arg, offset, scopes, semantic_index, struct_fields)?;
                 }
@@ -1292,6 +1299,7 @@ fn validate_expression(
         }
         Expression::GenericCall(callee, _, args) => {
             validate_expression(callee, offset, scopes, semantic_index, struct_fields)?;
+            validate_declared_call_arity(callee, args.len(), offset, scopes)?;
             for arg in args {
                 validate_expression(arg, offset, scopes, semantic_index, struct_fields)?;
             }
@@ -1487,7 +1495,7 @@ fn predeclare_block_symbols(
     scopes: &mut [HashMap<String, BindingInfo>],
 ) -> Result<(), SemanticError> {
     for stmt in statements {
-        if let crate::ast::StatementKind::Def { name, .. } = &stmt.kind {
+        if let crate::ast::StatementKind::Def { name, params, .. } = &stmt.kind {
             if current_scope_contains(scopes, name) {
                 return Err(SemanticError {
                     offset: stmt.span.start,
@@ -1500,11 +1508,42 @@ fn predeclare_block_symbols(
                 BindingInfo {
                     is_mut: false,
                     can_write_through: false,
+                    callable_arity: Some(params.len()),
                 },
             );
         }
     }
     Ok(())
+}
+
+fn validate_declared_call_arity(
+    callee: &crate::ast::Expression,
+    actual_arg_count: usize,
+    offset: usize,
+    scopes: &[HashMap<String, BindingInfo>],
+) -> Result<(), SemanticError> {
+    let crate::ast::Expression::Ident(name) = callee else {
+        return Ok(());
+    };
+
+    let Some(binding) = lookup_binding(name, scopes) else {
+        return Ok(());
+    };
+    let Some(expected_arg_count) = binding.callable_arity else {
+        return Ok(());
+    };
+
+    if expected_arg_count == actual_arg_count {
+        return Ok(());
+    }
+
+    Err(SemanticError {
+        offset,
+        message: format!(
+            "call to `{}` expects {} argument(s), found {}",
+            name, expected_arg_count, actual_arg_count
+        ),
+    })
 }
 
 fn validate_method_name_uniqueness(
