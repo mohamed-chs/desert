@@ -717,6 +717,7 @@ fn validate_top_level_declarations(program: &crate::ast::Program) -> Result<(), 
     let mut function_names = HashSet::new();
     let mut struct_names = HashSet::new();
     let mut protocol_names = HashSet::new();
+    let mut declarations = HashMap::new();
 
     for stmt in &program.statements {
         match &stmt.kind {
@@ -727,6 +728,17 @@ fn validate_top_level_declarations(program: &crate::ast::Program) -> Result<(), 
                         message: format!("duplicate top-level function `{}`", name),
                     });
                 }
+                if let Some(previous) = declarations.insert(name.as_str(), "function") {
+                    if previous != "function" {
+                        return Err(SemanticError {
+                            offset: stmt.span.start,
+                            message: format!(
+                                "top-level name `{}` is already declared as {}",
+                                name, previous
+                            ),
+                        });
+                    }
+                }
             }
             crate::ast::StatementKind::Struct { name, .. } => {
                 if !struct_names.insert(name.as_str()) {
@@ -735,6 +747,17 @@ fn validate_top_level_declarations(program: &crate::ast::Program) -> Result<(), 
                         message: format!("duplicate top-level struct `{}`", name),
                     });
                 }
+                if let Some(previous) = declarations.insert(name.as_str(), "struct") {
+                    if previous != "struct" {
+                        return Err(SemanticError {
+                            offset: stmt.span.start,
+                            message: format!(
+                                "top-level name `{}` is already declared as {}",
+                                name, previous
+                            ),
+                        });
+                    }
+                }
             }
             crate::ast::StatementKind::Protocol { name, .. } => {
                 if !protocol_names.insert(name.as_str()) {
@@ -742,6 +765,17 @@ fn validate_top_level_declarations(program: &crate::ast::Program) -> Result<(), 
                         offset: stmt.span.start,
                         message: format!("duplicate top-level protocol `{}`", name),
                     });
+                }
+                if let Some(previous) = declarations.insert(name.as_str(), "protocol") {
+                    if previous != "protocol" {
+                        return Err(SemanticError {
+                            offset: stmt.span.start,
+                            message: format!(
+                                "top-level name `{}` is already declared as {}",
+                                name, previous
+                            ),
+                        });
+                    }
                 }
             }
             _ => {}

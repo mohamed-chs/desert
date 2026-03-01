@@ -250,6 +250,16 @@ fn check_reports_duplicate_top_level_function_names() {
 }
 
 #[test]
+fn check_reports_top_level_name_collision_across_declaration_kinds() {
+    let mut cmd = cargo_bin_cmd!("desert");
+    cmd.arg("check")
+        .arg("tests/fixtures/check_fail_top_level_name_collision.ds");
+    cmd.assert().failure().stderr(predicates::str::contains(
+        "Semantic error at line 4, column 1: top-level name `Foo` is already declared as function",
+    ));
+}
+
+#[test]
 fn check_reports_duplicate_struct_fields() {
     let mut cmd = cargo_bin_cmd!("desert");
     cmd.arg("check")

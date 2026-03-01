@@ -1,0 +1,5 @@
+def Foo():
+    return 1
+
+struct Foo:
+    value: i32
