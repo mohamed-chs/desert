@@ -24,16 +24,21 @@ cargo build --release
 ### Commands
 - **Transpile**: `desert transpile input.ds -o output.rs`
 - **Transpile Project**: `desert transpile path/to/project` (expects `desert.toml` or `Desert.toml`, default entry `src/main.ds`)
+- **Transpile Current Project**: `desert transpile`
 - **Check**: `desert check input.ds` (runs rustc and translates errors)
 - **Check Project**: `desert check path/to/project` (same manifest/entrypoint resolution)
+- **Check Current Project**: `desert check`
 - **Run**: `desert run input.ds`
 - **Run Project**: `desert run path/to/project`
+- **Run Current Project**: `desert run`
 - **Run With Args**: `desert run input.ds -- arg1 arg2`
 - **New Project**: `desert new my_app`
 - **Format**: `desert fmt path/to/file_or_dir`
+- **Format Current Directory**: `desert fmt`
 - **Format Check**: `desert fmt path/to/file_or_dir --check`
 - **Doctor**: `desert doctor [path/to/file_or_project]`
 - **Graph**: `desert graph path/to/project` (prints resolved import order)
+- **Graph Current Project**: `desert graph`
 
 Project source files can import other files using `import "relative/path.ds"` or dotted paths like `import util.math` (resolved relative to the importing file, `.ds` extension implied).
 

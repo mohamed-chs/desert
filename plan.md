@@ -45,3 +45,4 @@ This roadmap follows current project direction: prioritize project workflow and 
 - Keep examples executable and checkable with current compiler behavior.
 - Recent shipped behavior: file-mode import graph resolution now loads top-level `import` dependencies (with cycle detection) for `check`/`transpile`/`run`, not just project-directory inputs.
 - Recent shipped behavior: semantic validation now checks direct `def` call arity (including forward local defs and generic-call syntax) before rustc.
+- Recent shipped behavior: `transpile`/`check`/`run`/`fmt`/`graph` now default to current directory when input is omitted.

@@ -51,15 +51,20 @@ The design priority is explicit semantics with predictable lowering. Syntax that
 ## CLI
 
 - `desert transpile <file.ds> [-o file.rs]`
+- `desert transpile` defaults to current directory
 - `desert check <file.ds> [--stage syntax|semantic|rust]`
+- `desert check` defaults to current directory
 - `desert run <file.ds> [-- args...]`
+- `desert run` defaults to current directory
 - `desert transpile <project_dir>` with `desert.toml`/`Desert.toml` (`[package].entry`, default `src/main.ds`)
 - `desert check <project_dir> [--stage syntax|semantic|rust]` with the same project entry resolution
 - `desert run <project_dir> [-- args...]` with the same project entry resolution
 - `desert new <path> [--force]` to scaffold `desert.toml` and `src/main.ds`
 - `desert fmt <file_or_dir> [--check]` to apply/enforce canonical Desert formatting
+- `desert fmt` defaults to current directory
 - `desert doctor [file_or_project]` to preflight rustc availability and source/project parse+semantic health
 - `desert graph <project_dir>` to print resolved import load order
+- `desert graph` defaults to current directory
 
 Project mode resolves top-level `import` statements recursively, loads imported files before importers, and rejects import cycles.
 

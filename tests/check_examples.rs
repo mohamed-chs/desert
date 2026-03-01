@@ -547,6 +547,14 @@ fn check_project_directory_with_default_entry() {
 }
 
 #[test]
+fn check_defaults_to_current_directory() {
+    let mut cmd = cargo_bin_cmd!("desert");
+    cmd.current_dir("tests/fixtures/project_ok");
+    cmd.arg("check");
+    cmd.assert().success();
+}
+
+#[test]
 fn check_project_directory_with_custom_entry() {
     let mut cmd = cargo_bin_cmd!("desert");
     cmd.arg("check").arg("tests/fixtures/project_custom_entry");
@@ -600,6 +608,16 @@ fn graph_project_directory_with_import_graph_order() {
 }
 
 #[test]
+fn graph_defaults_to_current_directory() {
+    let mut cmd = cargo_bin_cmd!("desert");
+    cmd.current_dir("tests/fixtures/project_import_graph");
+    cmd.arg("graph");
+    cmd.assert().success().stdout(predicates::str::contains(
+        "src/util/ops.ds\nsrc/util/math.ds\nsrc/main.ds\n",
+    ));
+}
+
+#[test]
 fn graph_rejects_file_input() {
     let mut cmd = cargo_bin_cmd!("desert");
     cmd.arg("graph").arg("examples/hello_world.ds");
@@ -621,6 +639,16 @@ fn run_file_executes_program() {
 fn run_project_executes_program() {
     let mut cmd = cargo_bin_cmd!("desert");
     cmd.arg("run").arg("tests/fixtures/project_ok");
+    cmd.assert()
+        .success()
+        .stdout(predicates::str::contains("project ok"));
+}
+
+#[test]
+fn run_defaults_to_current_directory() {
+    let mut cmd = cargo_bin_cmd!("desert");
+    cmd.current_dir("tests/fixtures/project_ok");
+    cmd.arg("run");
     cmd.assert()
         .success()
         .stdout(predicates::str::contains("project ok"));
@@ -705,6 +733,26 @@ fn fmt_rewrites_unformatted_file() {
     );
 
     let _ = fs::remove_file(&file);
+}
+
+#[test]
+fn fmt_defaults_to_current_directory() {
+    let dir = unique_temp_path("desert_fmt_dir");
+    fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("main.ds");
+    fs::write(&file, "def main():\n    mut x=1\n").unwrap();
+
+    let mut cmd = cargo_bin_cmd!("desert");
+    cmd.current_dir(&dir);
+    cmd.arg("fmt");
+    cmd.assert()
+        .success()
+        .stdout(predicates::str::contains("Formatted 1 file(s)."));
+
+    let formatted = fs::read_to_string(&file).unwrap();
+    assert_eq!(formatted, "def main():\n    mut x = 1\n");
+
+    let _ = fs::remove_dir_all(&dir);
 }
 
 #[test]

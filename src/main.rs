@@ -34,7 +34,8 @@ struct Cli {
 enum Commands {
     /// Transpile a .ds file to .rs
     Transpile {
-        /// Input .ds file
+        /// Input .ds file or project directory (defaults to current directory)
+        #[arg(default_value = ".")]
         input: PathBuf,
         /// Output .rs file (optional)
         #[arg(short, long)]
@@ -42,7 +43,8 @@ enum Commands {
     },
     /// Check a .ds file for errors
     Check {
-        /// Input .ds file
+        /// Input .ds file or project directory (defaults to current directory)
+        #[arg(default_value = ".")]
         input: PathBuf,
         /// Check stage: syntax-only, syntax+semantic, or full rustc-backed check
         #[arg(long, value_enum, default_value_t = CheckStage::Rust)]
@@ -50,7 +52,8 @@ enum Commands {
     },
     /// Compile and run a .ds file or project
     Run {
-        /// Input .ds file or project directory
+        /// Input .ds file or project directory (defaults to current directory)
+        #[arg(default_value = ".")]
         input: PathBuf,
         /// Arguments passed through to the program (`desert run app.ds -- arg1 arg2`)
         #[arg(last = true)]
@@ -66,7 +69,8 @@ enum Commands {
     },
     /// Format Desert source files
     Fmt {
-        /// Input .ds file or directory (formats all .ds files recursively)
+        /// Input .ds file or directory (defaults to current directory)
+        #[arg(default_value = ".")]
         input: PathBuf,
         /// Check mode: fail if any file would be reformatted
         #[arg(long)]
@@ -79,7 +83,8 @@ enum Commands {
     },
     /// Print resolved import graph order for a project
     Graph {
-        /// Project directory containing desert.toml/Desert.toml
+        /// Project directory containing desert.toml/Desert.toml (defaults to current directory)
+        #[arg(default_value = ".")]
         input: PathBuf,
     },
 }

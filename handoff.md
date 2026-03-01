@@ -36,6 +36,7 @@ Core quality checks currently pass:
 ## Implemented Project Surface
 
 - CLI now accepts either a single `.ds` file or a project directory for `transpile`/`check`/`run`, plus project scaffolding with `new`, formatting with `fmt`, and preflight validation with `doctor`.
+- `transpile`/`check`/`run`/`fmt`/`graph` now default to the current directory when input is omitted.
 - Project directories require `desert.toml` or `Desert.toml`.
 - Entrypoint resolution uses `[package].entry` when provided, defaulting to `src/main.ds`.
 - Project mode resolves top-level imports recursively (relative to importing file), defaults missing import extensions to `.ds`, and rejects import cycles.
