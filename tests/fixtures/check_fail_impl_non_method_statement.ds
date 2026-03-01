@@ -1,0 +1,8 @@
+struct Counter:
+    value: i32
+
+impl Counter:
+    mut seed = 0
+
+    def bump(mut self):
+        self.value = self.value + seed

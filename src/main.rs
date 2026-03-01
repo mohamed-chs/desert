@@ -900,6 +900,11 @@ fn validate_statements(
             StatementKind::Impl {
                 for_type, methods, ..
             } => {
+                validate_method_block_shapes(
+                    methods,
+                    stmt.span.start,
+                    &format!("impl for `{}`", for_type),
+                )?;
                 validate_method_name_uniqueness(
                     methods,
                     stmt.span.start,
@@ -914,6 +919,11 @@ fn validate_statements(
                 )?;
             }
             StatementKind::Protocol { name, methods } => {
+                validate_method_block_shapes(
+                    methods,
+                    stmt.span.start,
+                    &format!("protocol `{}`", name),
+                )?;
                 validate_method_name_uniqueness(
                     methods,
                     stmt.span.start,
@@ -1200,6 +1210,25 @@ fn validate_method_name_uniqueness(
                     message: format!("duplicate method `{}` in {}", name, owner_label),
                 });
             }
+        }
+    }
+    Ok(())
+}
+
+fn validate_method_block_shapes(
+    methods: &[crate::ast::Statement],
+    fallback_offset: usize,
+    owner_label: &str,
+) -> Result<(), SemanticError> {
+    for method in methods {
+        if !matches!(method.kind, crate::ast::StatementKind::Def { .. }) {
+            return Err(SemanticError {
+                offset: method.span.start.max(fallback_offset),
+                message: format!(
+                    "{} can only contain `def` method declarations",
+                    owner_label
+                ),
+            });
         }
     }
     Ok(())

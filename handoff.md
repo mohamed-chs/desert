@@ -76,6 +76,7 @@ Core quality checks currently pass:
 - Added semantic validation that rejects duplicate field names within a `struct` declaration before Rust lowering.
 - Added semantic validation that rejects duplicate top-level `def`/`struct`/`protocol` names before Rust lowering.
 - Added semantic validation that rejects duplicate method names within an `impl` or `protocol` block before Rust lowering.
+- Added semantic validation that rejects non-`def` statements inside `impl`/`protocol` bodies before Rust lowering.
 
 ## Known Gaps
 

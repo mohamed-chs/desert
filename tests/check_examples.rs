@@ -270,6 +270,16 @@ fn check_reports_duplicate_impl_method_names() {
 }
 
 #[test]
+fn check_reports_impl_body_requires_method_declarations() {
+    let mut cmd = cargo_bin_cmd!("desert");
+    cmd.arg("check")
+        .arg("tests/fixtures/check_fail_impl_non_method_statement.ds");
+    cmd.assert().failure().stderr(predicates::str::contains(
+        "Semantic error at line 5, column 5: impl for `Counter` can only contain `def` method declarations",
+    ));
+}
+
+#[test]
 fn check_reports_method_resolution_failure_with_desert_line_mapping() {
     let mut cmd = cargo_bin_cmd!("desert");
     cmd.arg("check")

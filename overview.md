@@ -33,6 +33,7 @@ The design priority is explicit semantics with predictable lowering. Syntax that
   - Duplicate top-level `def`/`struct`/`protocol` names are rejected during semantic validation before Rust emission
 - `impl`/`protocol` method declarations:
   - Duplicate method names within the same `impl` or `protocol` block are rejected during semantic validation
+  - `impl` and `protocol` bodies only allow `def` declarations
 - Unified dot resolution with scoped type/value tracking:
   - static call: `Type.new()` -> `Type::new()`
   - method call: `value.method()` -> `value.method()`
