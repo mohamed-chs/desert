@@ -1,0 +1,8 @@
+def normalize(value: i32) -> i32:
+    if value < 0:
+        return 0
+    else:
+        return value
+
+def combine(base: i32, delta: i32) -> i32:
+    return base + delta

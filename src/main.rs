@@ -1271,6 +1271,16 @@ fn validate_statements(
                         message: "`import` is only allowed at top level".to_string(),
                     });
                 }
+                if crate::imports::rust_use_from_import_path(path).is_none()
+                    && matches!(&stmt.kind, StatementKind::Import { alias: Some(_), .. })
+                {
+                    return Err(SemanticError {
+                        offset: stmt.span.start,
+                        message:
+                            "aliasing non-rust imports is unsupported (use plain `import \"path\"`)"
+                                .to_string(),
+                    });
+                }
                 if let Some(use_path) = crate::imports::rust_use_from_import_path(path)
                     && !crate::imports::is_supported_rust_root(&use_path)
                 {
@@ -1288,6 +1298,20 @@ fn validate_statements(
                     return Err(SemanticError {
                         offset: stmt.span.start,
                         message: "`from ... import ...` is only allowed at top level".to_string(),
+                    });
+                }
+                if crate::imports::rust_use_from_import_path(path).is_none()
+                    && matches!(
+                        &stmt.kind,
+                        StatementKind::FromImport { items, .. }
+                            if items.iter().any(|item| item.alias.is_some())
+                    )
+                {
+                    return Err(SemanticError {
+                        offset: stmt.span.start,
+                        message:
+                            "aliasing non-rust from-import items is unsupported (remove `as ...`)"
+                                .to_string(),
                     });
                 }
                 if let Some(use_path) = crate::imports::rust_use_from_import_path(path)

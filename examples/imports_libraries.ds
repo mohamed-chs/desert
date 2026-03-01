@@ -1,0 +1,10 @@
+import "util/library_math.ds"
+from rust.std.cmp import max as std_max
+from rust.core.cmp import min as core_min
+
+def main():
+    let left = normalize(-4)
+    let right = combine(7, 5)
+    let hi = std_max(left, right)
+    let lo = core_min(left, right)
+    $print("bounds {lo} {hi}")

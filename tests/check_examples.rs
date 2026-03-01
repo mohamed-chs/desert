@@ -65,6 +65,11 @@ fn check_imports_example() {
 }
 
 #[test]
+fn check_imports_libraries_example() {
+    run_check("imports_libraries.ds");
+}
+
+#[test]
 fn check_match_option_example() {
     run_check("match_option.ds");
 }
@@ -320,12 +325,40 @@ fn check_file_input_with_rust_from_import_alias_resolves_symbols() {
 }
 
 #[test]
+fn check_file_input_with_rust_core_from_import_alias_resolves_symbols() {
+    let mut cmd = cargo_bin_cmd!("desert");
+    cmd.arg("check")
+        .arg("tests/fixtures/check_ok_rust_from_import_core_alias.ds");
+    cmd.assert().success();
+}
+
+#[test]
 fn check_rejects_unsupported_rust_import_root() {
     let mut cmd = cargo_bin_cmd!("desert");
     cmd.arg("check")
         .arg("tests/fixtures/check_fail_rust_import_unsupported_root.ds");
     cmd.assert().failure().stderr(predicates::str::contains(
         "unsupported rust import root `serde` (only std/core/alloc are supported)",
+    ));
+}
+
+#[test]
+fn check_rejects_aliasing_file_import() {
+    let mut cmd = cargo_bin_cmd!("desert");
+    cmd.arg("check")
+        .arg("tests/fixtures/check_fail_file_import_alias_unsupported.ds");
+    cmd.assert().failure().stderr(predicates::str::contains(
+        "aliasing non-rust imports is unsupported (use plain `import \"path\"`)",
+    ));
+}
+
+#[test]
+fn check_rejects_aliasing_file_from_import_items() {
+    let mut cmd = cargo_bin_cmd!("desert");
+    cmd.arg("check")
+        .arg("tests/fixtures/check_fail_file_from_import_alias_unsupported.ds");
+    cmd.assert().failure().stderr(predicates::str::contains(
+        "aliasing non-rust from-import items is unsupported (remove `as ...`)",
     ));
 }
 

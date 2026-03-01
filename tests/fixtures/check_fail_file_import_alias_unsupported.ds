@@ -1,0 +1,1 @@
+import "check_ok_file_import_dep.ds" as dep
