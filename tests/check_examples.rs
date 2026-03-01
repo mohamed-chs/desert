@@ -68,7 +68,7 @@ fn check_reports_translated_diagnostics_for_type_mismatch_fixture() {
         .failure()
         .stdout(predicates::str::contains("mismatched types"))
         .stdout(predicates::str::contains(
-            "tests/fixtures/check_fail_type_mismatch.ds:2: in Desert source",
+            "tests/fixtures/check_fail_type_mismatch.ds:2:5: in Desert source",
         ))
         .stderr(predicates::str::contains(
             "Rust check failed with translated diagnostics.",
@@ -441,7 +441,7 @@ fn check_reports_method_resolution_failure_with_desert_line_mapping() {
             "no method named `nope` found for type `i32`",
         ))
         .stdout(predicates::str::contains(
-            "tests/fixtures/check_fail_method_not_found.ds:3: in Desert source",
+            "tests/fixtures/check_fail_method_not_found.ds:3:5: in Desert source",
         ))
         .stderr(predicates::str::contains(
             "Rust check failed with translated diagnostics.",
@@ -459,7 +459,7 @@ fn check_project_diagnostic_reports_imported_file_path() {
             "no method named `nope` found for type `i32`",
         ))
         .stdout(predicates::str::contains(
-            "tests/fixtures/project_check_fail_imported_diag/src/util/math.ds:2: in Desert source",
+            "tests/fixtures/project_check_fail_imported_diag/src/util/math.ds:2:5: in Desert source",
         ))
         .stderr(predicates::str::contains(
             "Rust check failed with translated diagnostics.",

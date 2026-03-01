@@ -312,6 +312,7 @@ fn line_origins_for_file(file_path: &Path, content: &str) -> anyhow::Result<Vec<
         origins.push(SourceLocation {
             file: file_name.clone(),
             line: idx + 1,
+            column: 1,
         });
     }
     Ok(origins)

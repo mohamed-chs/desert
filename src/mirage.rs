@@ -46,12 +46,12 @@ impl Mirage {
             // rustc lines are 1-based. SourceMap uses 0-based.
             let rs_line = span.line_start.saturating_sub(1);
             if let Some(ds_loc) = source_map.get_location(rs_line) {
-                if !seen.insert((ds_loc.file.clone(), ds_loc.line)) {
+                if !seen.insert((ds_loc.file.clone(), ds_loc.line, ds_loc.column)) {
                     continue;
                 }
                 locations.push_str(&format!(
-                    "\n  {}:{}: in Desert source",
-                    ds_loc.file, ds_loc.line
+                    "\n  {}:{}:{}: in Desert source",
+                    ds_loc.file, ds_loc.line, ds_loc.column
                 ));
             }
         }
@@ -99,6 +99,7 @@ mod tests {
             SourceLocation {
                 file: "example.ds".to_string(),
                 line: 9,
+                column: 5,
             },
         );
         let msg = Diagnostic {
@@ -113,7 +114,7 @@ mod tests {
         assert!(
             translated.contains("Hint: Declare the binding with `mut` before using `~` or `move`.")
         );
-        assert!(translated.contains("example.ds:9: in Desert source"));
+        assert!(translated.contains("example.ds:9:5: in Desert source"));
     }
 
     #[test]

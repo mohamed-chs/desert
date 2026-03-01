@@ -29,7 +29,7 @@ This roadmap follows current project direction: prioritize project workflow and 
 
 ## Phase C: Diagnostics Upgrade (Staged, Optional While A/B Run)
 
-- Move from line-level mapping toward span-aware locations. (File+line mapping for project imports is done; column precision remains.)
+- Move from line-level mapping toward span-aware locations. (File+line+statement-start-column mapping is done; token-accurate columns remain.)
 - Expand Mirage coverage for common ownership/type rustc families.
 - Add explicit fix-style hints for recurring Desert authoring mistakes.
 

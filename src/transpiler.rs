@@ -10,7 +10,19 @@ fn generated_location() -> SourceLocation {
     SourceLocation {
         file: "<generated>".to_string(),
         line: 0,
+        column: 0,
     }
+}
+
+fn line_col_from_offset(source: &str, offset: usize) -> (usize, usize) {
+    let safe_offset = offset.min(source.len());
+    let prefix = &source[..safe_offset];
+    let line = prefix.bytes().filter(|b| *b == b'\n').count() + 1;
+    let col = prefix
+        .rsplit('\n')
+        .next()
+        .map_or(1, |s| s.chars().count() + 1);
+    (line, col)
 }
 
 fn statement_location(
@@ -18,10 +30,14 @@ fn statement_location(
     stmt: &Statement,
     line_origins: &[SourceLocation],
 ) -> SourceLocation {
-    let ds_line = source[..stmt.span.start].lines().count().saturating_sub(1);
+    let (line, col) = line_col_from_offset(source, stmt.span.start);
     line_origins
-        .get(ds_line)
-        .cloned()
+        .get(line.saturating_sub(1))
+        .map(|origin| SourceLocation {
+            file: origin.file.clone(),
+            line: origin.line,
+            column: col,
+        })
         .unwrap_or_else(generated_location)
 }
 
@@ -954,6 +970,7 @@ mod tests {
             origins.push(SourceLocation {
                 file: "<test>".to_string(),
                 line: idx + 1,
+                column: 1,
             });
         }
         origins
@@ -1036,6 +1053,23 @@ mod tests {
         let expected = "fn main() {\n    println!(\"{}\", \"Hello, Desert!\".to_string());\n}\n";
 
         assert_eq!(rust_code, expected);
+    }
+
+    #[test]
+    fn test_source_map_tracks_top_level_line_boundaries() {
+        let input = "let a = 1\nlet b = 2";
+        let lexer = Lexer::new(input);
+        let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
+        let (_, program) = parse_program(&tokens).unwrap();
+        let transpiler = Transpiler::new();
+        let (_, source_map) = transpile_program(&transpiler, &program, input);
+
+        let second = source_map
+            .get_location(1)
+            .expect("expected source location for second Rust line");
+        assert_eq!(second.file, "<test>");
+        assert_eq!(second.line, 2);
+        assert_eq!(second.column, 1);
     }
 
     #[test]

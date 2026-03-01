@@ -2,6 +2,7 @@
 pub struct SourceLocation {
     pub file: String,
     pub line: usize,
+    pub column: usize,
 }
 
 pub struct SourceMap {

@@ -82,12 +82,13 @@ Core quality checks currently pass:
 - Added semantic validation that rejects duplicate method names within an `impl` or `protocol` block before Rust lowering.
 - Added semantic validation that rejects non-`def` statements inside `impl`/`protocol` bodies before Rust lowering.
 - Added semantic validation that `impl` targets must name declared `struct`s, `impl Protocol for Type` must name a declared `protocol`, and protocol impl methods must match the protocol method set/signatures (reject unknown/missing methods and signature mismatches) before Rust lowering.
+- Extended Rust-to-Desert diagnostic mapping to include source columns (`file:line:column`) using statement-start column tracking, and fixed transpiler line-boundary mapping for top-level statements.
 
 ## Known Gaps
 
 - No project-level dependency management yet.
 - No package/dependency management yet beyond local file imports.
-- Rust diagnostics still map by line (not precise columns) after transpilation.
+- Rust diagnostics now map to file+line+statement-start column; full token/span-accurate column mapping is still pending.
 - Resolver is heuristic, not semantic.
 - Mirage translations are simple string rewrites.
 - Matmul lowering currently targets specific float vector/matrix shapes.
