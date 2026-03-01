@@ -690,6 +690,12 @@ struct BindingInfo {
     can_write_through: bool,
 }
 
+#[derive(Debug, Default)]
+struct SemanticIndex {
+    struct_names: HashSet<String>,
+    protocol_methods: HashMap<String, Vec<String>>,
+}
+
 fn validate_program(input_content: &str, program: &crate::ast::Program) -> anyhow::Result<()> {
     validate_top_level_declarations(program).map_err(|err| {
         let (line, col) = line_col_from_offset(input_content, err.offset);
@@ -700,10 +706,19 @@ fn validate_program(input_content: &str, program: &crate::ast::Program) -> anyho
             err.message
         )
     })?;
+    let semantic_index = collect_semantic_index(program);
     let struct_fields = collect_struct_fields(program);
     let mut scopes = vec![HashMap::new()];
-    validate_statements(&program.statements, &mut scopes, &struct_fields, 0, 0, true).map_err(
-        |err| {
+    validate_statements(
+        &program.statements,
+        &mut scopes,
+        &semantic_index,
+        &struct_fields,
+        0,
+        0,
+        true,
+    )
+    .map_err(|err| {
         let (line, col) = line_col_from_offset(input_content, err.offset);
         anyhow::anyhow!(
             "Semantic error at line {}, column {}: {}",
@@ -711,8 +726,7 @@ fn validate_program(input_content: &str, program: &crate::ast::Program) -> anyho
             col,
             err.message
         )
-    },
-    )
+    })
 }
 
 fn validate_top_level_declarations(program: &crate::ast::Program) -> Result<(), SemanticError> {
@@ -790,6 +804,7 @@ fn validate_top_level_declarations(program: &crate::ast::Program) -> Result<(), 
 fn validate_statements(
     statements: &[crate::ast::Statement],
     scopes: &mut Vec<HashMap<String, BindingInfo>>,
+    semantic_index: &SemanticIndex,
     struct_fields: &HashMap<String, Vec<String>>,
     nesting_depth: usize,
     function_depth: usize,
@@ -864,6 +879,7 @@ fn validate_statements(
                 validate_statements(
                     body,
                     scopes,
+                    semantic_index,
                     struct_fields,
                     nesting_depth + 1,
                     function_depth + 1,
@@ -881,6 +897,7 @@ fn validate_statements(
                 validate_statements(
                     then_block,
                     scopes,
+                    semantic_index,
                     struct_fields,
                     nesting_depth + 1,
                     function_depth,
@@ -892,6 +909,7 @@ fn validate_statements(
                     validate_statements(
                         block,
                         scopes,
+                        semantic_index,
                         struct_fields,
                         nesting_depth + 1,
                         function_depth,
@@ -918,6 +936,7 @@ fn validate_statements(
                 validate_statements(
                     body,
                     scopes,
+                    semantic_index,
                     struct_fields,
                     nesting_depth + 1,
                     function_depth,
@@ -933,6 +952,7 @@ fn validate_statements(
                     validate_statements(
                         body,
                         scopes,
+                        semantic_index,
                         struct_fields,
                         nesting_depth + 1,
                         function_depth,
@@ -956,6 +976,7 @@ fn validate_statements(
             StatementKind::Impl {
                 for_type, methods, ..
             } => {
+                validate_impl_declaration(stmt, semantic_index)?;
                 validate_method_block_shapes(
                     methods,
                     stmt.span.start,
@@ -969,6 +990,7 @@ fn validate_statements(
                 validate_statements(
                     methods,
                     scopes,
+                    semantic_index,
                     struct_fields,
                     nesting_depth + 1,
                     function_depth,
@@ -989,6 +1011,7 @@ fn validate_statements(
                 validate_statements(
                     methods,
                     scopes,
+                    semantic_index,
                     struct_fields,
                     nesting_depth + 1,
                     function_depth,
@@ -1299,6 +1322,77 @@ fn validate_method_block_shapes(
     Ok(())
 }
 
+fn validate_impl_declaration(
+    stmt: &crate::ast::Statement,
+    semantic_index: &SemanticIndex,
+) -> Result<(), SemanticError> {
+    let crate::ast::StatementKind::Impl {
+        protocol,
+        for_type,
+        methods,
+    } = &stmt.kind
+    else {
+        return Ok(());
+    };
+
+    if !semantic_index.struct_names.contains(for_type) {
+        return Err(SemanticError {
+            offset: stmt.span.start,
+            message: format!(
+                "impl target `{}` must be a declared struct",
+                for_type
+            ),
+        });
+    }
+
+    let Some(protocol_name) = protocol.as_ref() else {
+        return Ok(());
+    };
+
+    let Some(required_methods) = semantic_index.protocol_methods.get(protocol_name) else {
+        return Err(SemanticError {
+            offset: stmt.span.start,
+            message: format!("impl references unknown protocol `{}`", protocol_name),
+        });
+    };
+
+    let required_set: HashSet<&str> = required_methods.iter().map(String::as_str).collect();
+    let mut provided = HashSet::new();
+    for method in methods {
+        if let crate::ast::StatementKind::Def { name, .. } = &method.kind {
+            provided.insert(name.as_str());
+            if !required_set.contains(name.as_str()) {
+                return Err(SemanticError {
+                    offset: method.span.start.max(stmt.span.start),
+                    message: format!(
+                        "impl for protocol `{}` on `{}` defines unknown method `{}`",
+                        protocol_name, for_type, name
+                    ),
+                });
+            }
+        }
+    }
+
+    let missing: Vec<&str> = required_methods
+        .iter()
+        .map(String::as_str)
+        .filter(|name| !provided.contains(name))
+        .collect();
+    if !missing.is_empty() {
+        return Err(SemanticError {
+            offset: stmt.span.start,
+            message: format!(
+                "impl for protocol `{}` on `{}` is missing methods: {}",
+                protocol_name,
+                for_type,
+                missing.join(", ")
+            ),
+        });
+    }
+
+    Ok(())
+}
+
 fn validate_constructor_call(
     struct_name: &str,
     args: &[crate::ast::Expression],
@@ -1435,4 +1529,27 @@ fn collect_struct_fields(program: &crate::ast::Program) -> HashMap<String, Vec<S
         }
     }
     fields
+}
+
+fn collect_semantic_index(program: &crate::ast::Program) -> SemanticIndex {
+    let mut index = SemanticIndex::default();
+    for stmt in &program.statements {
+        match &stmt.kind {
+            crate::ast::StatementKind::Struct { name, .. } => {
+                index.struct_names.insert(name.clone());
+            }
+            crate::ast::StatementKind::Protocol { name, methods } => {
+                let method_names = methods
+                    .iter()
+                    .filter_map(|method| match &method.kind {
+                        crate::ast::StatementKind::Def { name, .. } => Some(name.clone()),
+                        _ => None,
+                    })
+                    .collect();
+                index.protocol_methods.insert(name.clone(), method_names);
+            }
+            _ => {}
+        }
+    }
+    index
 }

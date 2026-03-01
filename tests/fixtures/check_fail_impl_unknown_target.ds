@@ -1,0 +1,7 @@
+protocol Speak:
+    def talk(self) -> Str:
+        return ""
+
+impl Speak for Dog:
+    def talk(self) -> Str:
+        return "woof"

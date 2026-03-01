@@ -1,0 +1,10 @@
+protocol Speak:
+    def talk(self) -> Str:
+        return ""
+
+struct Dog:
+    name: Str
+
+impl Speak for Dog:
+    def bark(self) -> Str:
+        return "woof"

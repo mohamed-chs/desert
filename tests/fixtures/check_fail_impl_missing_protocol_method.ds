@@ -1,0 +1,13 @@
+protocol Runner:
+    def start(self):
+        return
+
+    def stop(self):
+        return
+
+struct Worker:
+    id: i32
+
+impl Runner for Worker:
+    def start(self):
+        return

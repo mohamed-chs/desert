@@ -1,0 +1,6 @@
+struct Dog:
+    name: Str
+
+impl Speak for Dog:
+    def talk(self) -> Str:
+        return "woof"

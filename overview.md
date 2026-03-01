@@ -38,6 +38,8 @@ The design priority is explicit semantics with predictable lowering. Syntax that
 - `impl`/`protocol` method declarations:
   - Duplicate method names within the same `impl` or `protocol` block are rejected during semantic validation
   - `impl` and `protocol` bodies only allow `def` declarations
+  - `impl` targets must be declared `struct` types, and `impl Protocol for Type` requires a declared `protocol`
+  - Protocol impls must match declared protocol method names (no missing methods, no extra methods)
 - Unified dot resolution with scoped type/value tracking:
   - static call: `Type.new()` -> `Type::new()`
   - method call: `value.method()` -> `value.method()`

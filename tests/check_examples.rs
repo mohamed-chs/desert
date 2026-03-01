@@ -310,6 +310,46 @@ fn check_reports_impl_body_requires_method_declarations() {
 }
 
 #[test]
+fn check_reports_impl_unknown_protocol() {
+    let mut cmd = cargo_bin_cmd!("desert");
+    cmd.arg("check")
+        .arg("tests/fixtures/check_fail_impl_unknown_protocol.ds");
+    cmd.assert().failure().stderr(predicates::str::contains(
+        "Semantic error at line 4, column 1: impl references unknown protocol `Speak`",
+    ));
+}
+
+#[test]
+fn check_reports_impl_unknown_target_type() {
+    let mut cmd = cargo_bin_cmd!("desert");
+    cmd.arg("check")
+        .arg("tests/fixtures/check_fail_impl_unknown_target.ds");
+    cmd.assert().failure().stderr(predicates::str::contains(
+        "Semantic error at line 5, column 1: impl target `Dog` must be a declared struct",
+    ));
+}
+
+#[test]
+fn check_reports_impl_protocol_unknown_method() {
+    let mut cmd = cargo_bin_cmd!("desert");
+    cmd.arg("check")
+        .arg("tests/fixtures/check_fail_impl_unknown_protocol_method.ds");
+    cmd.assert().failure().stderr(predicates::str::contains(
+        "Semantic error at line 9, column 5: impl for protocol `Speak` on `Dog` defines unknown method `bark`",
+    ));
+}
+
+#[test]
+fn check_reports_impl_protocol_missing_method() {
+    let mut cmd = cargo_bin_cmd!("desert");
+    cmd.arg("check")
+        .arg("tests/fixtures/check_fail_impl_missing_protocol_method.ds");
+    cmd.assert().failure().stderr(predicates::str::contains(
+        "Semantic error at line 11, column 1: impl for protocol `Runner` on `Worker` is missing methods: stop",
+    ));
+}
+
+#[test]
 fn check_reports_method_resolution_failure_with_desert_line_mapping() {
     let mut cmd = cargo_bin_cmd!("desert");
     cmd.arg("check")
