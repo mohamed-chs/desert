@@ -240,6 +240,16 @@ fn check_reports_duplicate_function_parameters() {
 }
 
 #[test]
+fn check_reports_duplicate_struct_fields() {
+    let mut cmd = cargo_bin_cmd!("desert");
+    cmd.arg("check")
+        .arg("tests/fixtures/check_fail_struct_duplicate_fields.ds");
+    cmd.assert().failure().stderr(predicates::str::contains(
+        "Semantic error at line 1, column 1: duplicate field `x` in struct `Pair`",
+    ));
+}
+
+#[test]
 fn check_reports_method_resolution_failure_with_desert_line_mapping() {
     let mut cmd = cargo_bin_cmd!("desert");
     cmd.arg("check")

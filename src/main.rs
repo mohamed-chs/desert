@@ -875,7 +875,21 @@ fn validate_statements(
                     });
                 }
             }
-            StatementKind::Struct { .. } | StatementKind::PyImport(_) => {}
+            StatementKind::Struct { name, fields } => {
+                let mut seen_fields = HashSet::new();
+                for field in fields {
+                    if !seen_fields.insert(field.name.as_str()) {
+                        return Err(SemanticError {
+                            offset: stmt.span.start,
+                            message: format!(
+                                "duplicate field `{}` in struct `{}`",
+                                field.name, name
+                            ),
+                        });
+                    }
+                }
+            }
+            StatementKind::PyImport(_) => {}
         }
     }
     Ok(())

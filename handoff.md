@@ -73,6 +73,7 @@ Core quality checks currently pass:
 - Added semantic validation that rejects nested `import` statements (`import` is now top-level-only) to match project graph resolution behavior and avoid silently ignored block-local imports.
 - Added semantic validation that rejects `return` outside `def` bodies so invalid top-level/control-block returns fail early with Desert line/column errors.
 - Added semantic validation that rejects duplicate parameter names in a single `def` signature before Rust lowering.
+- Added semantic validation that rejects duplicate field names within a `struct` declaration before Rust lowering.
 
 ## Known Gaps
 
