@@ -1093,6 +1093,12 @@ impl Transpiler {
                 StatementKind::FromImport { path, items } => {
                     if let Some(use_path) = rust_use_from_from_import(path, items) {
                         uses.insert(use_path);
+                    } else {
+                        for item in items {
+                            if let Some(alias) = &item.alias {
+                                uses.insert(format!("crate::{} as {}", item.name, alias));
+                            }
+                        }
                     }
                 }
                 _ => {}
@@ -1753,6 +1759,17 @@ mod tests {
         let transpiler = Transpiler::new();
         let (rust_code, _) = transpile_program(&transpiler, &program, input);
         assert!(rust_code.contains("use std::cmp::{max as maximum, min};"));
+    }
+
+    #[test]
+    fn test_transpile_local_from_import_alias_emits_crate_use_alias() {
+        let input = "from util.math import plus_one as plus";
+        let lexer = Lexer::new(input);
+        let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
+        let (_, program) = parse_program(&tokens).unwrap();
+        let transpiler = Transpiler::new();
+        let (rust_code, _) = transpile_program(&transpiler, &program, input);
+        assert!(rust_code.contains("use crate::plus_one as plus;"));
     }
 
     #[test]

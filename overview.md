@@ -7,9 +7,8 @@ The design priority is explicit semantics with predictable lowering. Syntax that
 ## Current Language Surface
 
 - Blocks: `if`/`elif`/`else`, `for`, `while`, `def`, `struct`, `protocol`, `impl`, `match`
-- Imports: `import "relative/path.ds"` and `import dotted.module` (resolved relative to the importing file, `.ds` default extension), plus Rust `use` passthrough via `import rust.std.cmp.max`, `import rust.std.collections.HashMap as Map`, `from rust.std.cmp import max as maximum, min`, or `import "rust:std::cmp::max"` (`std`/`core`/`alloc` roots)
+- Imports: `import "relative/path.ds"`, `import dotted.module`, and `from ... import ...` for local modules (resolved relative to the importing file, `.ds` default extension), plus Rust `use` passthrough via `import rust.std.cmp.max`, `import rust.std.collections.HashMap as Map`, `from rust.std.cmp import max as maximum, min`, or `import "rust:std::cmp::max"` (`std`/`core`/`alloc` roots)
   - `from ... import ...` now rejects duplicate imported items and duplicate introduced local names within a single statement
-  - Non-Rust `from ... import ...` forms are rejected during semantic validation; use plain `import "path"` for local Desert modules
 - Bindings: `let` and `mut`
 - Ownership and borrows:
   - `move place` lowers to `std::mem::take(&mut place)`
@@ -75,7 +74,7 @@ The design priority is explicit semantics with predictable lowering. Syntax that
 - `desert graph <project_dir>` to print resolved import load order
 - `desert graph` defaults to current directory
 
-Project mode resolves top-level `import` statements recursively, loads imported files before importers, and rejects import cycles.
+Project mode resolves top-level `import`/`from ... import ...` statements recursively, loads imported files before importers, and rejects import cycles.
 
 `check` transpiles to Rust, runs `cargo check --message-format=json` (Rust backend), and maps diagnostics back to Desert source file+line locations.
 

@@ -158,6 +158,8 @@ Supported forms:
 ```python
 import "util/math.ds"
 import util.math
+from "util/math.ds" import mean3 as avg3, clamp_zero
+from util.math import mean3
 import rust.std.collections.HashMap as Map
 from rust.std.cmp import max as maximum, min
 import rust.std.cmp.max
@@ -170,6 +172,7 @@ Rules:
 - Dotted imports resolve relative to the importing file.
 - `.ds` extension is implied for dotted forms.
 - Import cycles are rejected.
+- `from ... import ...` works for local Desert modules and can alias imported items with `as`.
 - `import rust...` / `import "rust:..."` lower to Rust `use ...;` and currently support `std`, `core`, and `alloc` roots.
 - `from rust... import ...` lowers to grouped Rust `use base::{...};`.
 

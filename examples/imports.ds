@@ -1,7 +1,7 @@
-import "util/metrics.ds"
+from "util/metrics.ds" import mean3 as avg3, clamp_zero
 
 def main():
-    let avg = mean3(9.0, 12.0, 15.0)
+    let avg = avg3(9.0, 12.0, 15.0)
     let cleaned = clamp_zero(-7)
     $print("Average: {avg}")
     $print("Clamped value: {cleaned}")

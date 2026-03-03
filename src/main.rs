@@ -452,9 +452,12 @@ fn collect_file_sources(
                 let import_path = resolve_import_path(&canonical_file, path, None)?;
                 collect_file_sources(&import_path, visited, loading, ordered_files)?;
             }
-            crate::ast::StatementKind::FromImport { .. } => {
-                // Non-rust from-import is currently unsupported and is validated
-                // semantically; keep graph loading aligned with that rule.
+            crate::ast::StatementKind::FromImport { path, .. } => {
+                if crate::imports::rust_use_from_import_path(path).is_some() {
+                    continue;
+                }
+                let import_path = resolve_import_path(&canonical_file, path, None)?;
+                collect_file_sources(&import_path, visited, loading, ordered_files)?;
             }
             _ => {}
         }
@@ -514,9 +517,18 @@ fn collect_project_sources(
                     ordered_files,
                 )?;
             }
-            crate::ast::StatementKind::FromImport { .. } => {
-                // Non-rust from-import is currently unsupported and is validated
-                // semantically; keep graph loading aligned with that rule.
+            crate::ast::StatementKind::FromImport { path, .. } => {
+                if crate::imports::rust_use_from_import_path(path).is_some() {
+                    continue;
+                }
+                let import_path = resolve_import_path(&canonical_file, path, Some(project_root))?;
+                collect_project_sources(
+                    &import_path,
+                    project_root,
+                    visited,
+                    loading,
+                    ordered_files,
+                )?;
             }
             _ => {}
         }
@@ -1397,22 +1409,7 @@ fn validate_statements(
                 }
                 if let StatementKind::FromImport { items, .. } = &stmt.kind {
                     validate_from_import_items(items, stmt.span.start)?;
-                    let rust_path = crate::imports::rust_use_from_import_path(path);
-                    if rust_path.is_none() {
-                        if items.iter().any(|item| item.alias.is_some()) {
-                            return Err(SemanticError {
-                                offset: stmt.span.start,
-                                message: "aliasing non-rust from-import items is unsupported (remove `as ...`)"
-                                    .to_string(),
-                            });
-                        }
-                        return Err(SemanticError {
-                            offset: stmt.span.start,
-                            message: "non-rust `from ... import ...` is unsupported (use plain `import \"path\"`)"
-                                .to_string(),
-                        });
-                    }
-                    if let Some(use_path) = rust_path
+                    if let Some(use_path) = crate::imports::rust_use_from_import_path(path)
                         && !crate::imports::is_supported_rust_root(&use_path)
                     {
                         return Err(SemanticError {
@@ -1758,10 +1755,13 @@ fn predeclare_block_symbols(
             }
             crate::ast::StatementKind::FromImport { path, items } => {
                 validate_from_import_items(items, stmt.span.start)?;
-                if crate::imports::rust_use_from_import_path(path).is_none() {
-                    continue;
-                }
+                let is_rust_from = crate::imports::rust_use_from_import_path(path).is_some();
                 for item in items {
+                    // Non-rust from-import without alias does not create a new symbol;
+                    // the imported module declarations are already loaded in program scope.
+                    if !is_rust_from && item.alias.is_none() {
+                        continue;
+                    }
                     let name = item.alias.as_deref().unwrap_or(&item.name);
                     if current_scope_contains(scopes, name) {
                         return Err(SemanticError {

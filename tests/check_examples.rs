@@ -1,5 +1,4 @@
 use assert_cmd::cargo::cargo_bin_cmd;
-use predicates::prelude::PredicateBooleanExt;
 use std::fs;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -429,36 +428,29 @@ fn check_rejects_aliasing_file_import() {
 }
 
 #[test]
-fn check_rejects_aliasing_file_from_import_items() {
+fn check_file_input_with_local_from_import_resolves_symbols() {
     let mut cmd = cargo_bin_cmd!("desert");
     cmd.arg("check")
-        .arg("tests/fixtures/check_fail_file_from_import_alias_unsupported.ds");
-    cmd.assert().failure().stderr(predicates::str::contains(
-        "aliasing non-rust from-import items is unsupported (remove `as ...`)",
-    ));
+        .arg("tests/fixtures/check_ok_file_from_import_entry.ds");
+    cmd.assert().success();
 }
 
 #[test]
-fn check_rejects_non_rust_from_import_items() {
+fn check_file_input_with_local_from_import_alias_resolves_symbols() {
     let mut cmd = cargo_bin_cmd!("desert");
     cmd.arg("check")
-        .arg("tests/fixtures/check_fail_file_from_import_unsupported.ds");
-    cmd.assert().failure().stderr(predicates::str::contains(
-        "Semantic error at line 1, column 1: non-rust `from ... import ...` is unsupported (use plain `import \"path\"`)",
-    ));
+        .arg("tests/fixtures/check_ok_file_from_import_alias.ds");
+    cmd.assert().success();
 }
 
 #[test]
-fn check_rejects_non_rust_from_import_before_graph_resolution() {
+fn check_reports_missing_local_from_import_target() {
     let mut cmd = cargo_bin_cmd!("desert");
     cmd.arg("check")
         .arg("tests/fixtures/check_fail_file_from_import_missing_target.ds");
     cmd.assert()
         .failure()
-        .stderr(predicates::str::contains(
-            "Semantic error at line 1, column 1: non-rust `from ... import ...` is unsupported",
-        ))
-        .stderr(predicates::str::contains("failed to resolve import").not());
+        .stderr(predicates::str::contains("failed to resolve import"));
 }
 
 #[test]

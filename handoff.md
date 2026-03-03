@@ -43,7 +43,7 @@ Core quality checks currently pass:
 - Project directories require `desert.toml` or `Desert.toml`.
 - Entrypoint resolution uses `[package].entry` when provided, defaulting to `src/main.ds`.
 - If no manifest exists, directory inputs now fall back to `src/main.ds`, then `main.ds`.
-- Project mode resolves top-level imports recursively (relative to importing file), defaults missing import extensions to `.ds`, and rejects import cycles.
+- Project mode resolves top-level `import` and `from ... import ...` statements recursively (relative to importing file), defaults missing import extensions to `.ds`, and rejects import cycles.
 - `desert graph <project_dir>` prints the resolved import/topological load order used for compilation.
 - `desert run <input>` now compiles and executes file/project programs directly, with optional passthrough args after `--`.
 - `desert new <path>` now scaffolds a runnable project (`desert.toml`, `src/main.ds`), with `--force` for non-empty dirs.
@@ -95,8 +95,7 @@ Core quality checks currently pass:
 - Added Rust-import passthrough semantics: `import rust...`/`import "rust:..."` now emit Rust `use` statements, skip local `.ds` graph resolution, and predeclare imported leaf names for semantic identifier validation.
 - Added richer Rust import syntax with aliasing and grouped forms: `import rust.std.collections.HashMap as Map` and `from rust.std.cmp import max as maximum, min`.
 - Added semantic validation that `from ... import ...` rejects duplicate imported items and duplicate introduced local names in a single statement before Rust lowering.
-- Added semantic validation that non-Rust `from ... import ...` forms are unsupported (including fail-fast diagnostics), keeping local-module imports on plain `import` paths.
-- Aligned file/project graph loading with `from ... import ...` semantics by skipping from-import dependency traversal, so unsupported non-Rust from-imports report semantic errors instead of import-resolution failures.
+- Added local-module `from ... import ...` support (including `as` aliases) with import-graph dependency traversal for both file and project inputs.
 - Improved rustc diagnostic translation to use Rust span columns when mapping back to Desert source, yielding more precise Desert column reporting than statement-start-only mapping.
 - Added semantic validation that generic-call syntax on Desert struct constructors is unsupported (`Struct[T](...)`), so `check`/`run` now fail fast with a direct Desert diagnostic instead of producing invalid Rust constructor-call output.
 - Added semantic validation for `match` arm ordering/shape: only one wildcard arm (`_`) is allowed, and no non-wildcard arm may appear after a wildcard arm.

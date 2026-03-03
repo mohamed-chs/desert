@@ -50,8 +50,7 @@ This roadmap follows current project direction: prioritize project workflow and 
 - Recent shipped behavior: `import rust...` / `import "rust:..."` now lowers to Rust `use ...;` statements (currently whitelisted to `std`/`core`/`alloc` roots), is ignored by local file-graph loading, and predeclares imported names for semantic identifier checks.
 - Recent shipped behavior: richer Rust import ergonomics now support aliases (`import rust.std.collections.HashMap as Map`) and grouped imports (`from rust.std.cmp import max as maximum, min`) with semantic predeclaration.
 - Recent shipped behavior: semantic validation now rejects duplicate `from ... import ...` items and duplicate introduced local names within a single import statement before Rust lowering.
-- Recent shipped behavior: semantic validation now rejects non-Rust `from ... import ...` statements (plain local-module `import` remains the supported form).
-- Recent shipped behavior: file/project import-graph loading now ignores `from ... import ...` dependencies so unsupported non-Rust forms fail with the intended semantic diagnostic instead of early path-resolution errors.
+- Recent shipped behavior: non-Rust `from ... import ...` is now supported for local Desert modules (including item aliases), and file/project import-graph loading now traverses those dependencies with cycle detection.
 - Recent shipped behavior: rustc-backed diagnostics now map Desert columns using span-column offsets per generated Rust line (instead of always reporting statement-start columns).
 - Recent shipped behavior: semantic validation now rejects generic-call syntax on Desert struct constructors (for example `Pair[i32](...)`) with a direct Desert error, avoiding invalid Rust constructor-call fallback.
 - Recent shipped behavior: semantic validation now rejects duplicate `match` wildcard arms and rejects non-wildcard arms after a wildcard arm, preventing unreachable-pattern lowering drift.
