@@ -53,3 +53,5 @@ This roadmap follows current project direction: prioritize project workflow and 
 - Recent shipped behavior: semantic validation now rejects non-Rust `from ... import ...` statements (plain local-module `import` remains the supported form).
 - Recent shipped behavior: file/project import-graph loading now ignores `from ... import ...` dependencies so unsupported non-Rust forms fail with the intended semantic diagnostic instead of early path-resolution errors.
 - Recent shipped behavior: rustc-backed diagnostics now map Desert columns using span-column offsets per generated Rust line (instead of always reporting statement-start columns).
+- Recent shipped behavior: semantic validation now rejects generic-call syntax on Desert struct constructors (for example `Pair[i32](...)`) with a direct Desert error, avoiding invalid Rust constructor-call fallback.
+- Recent shipped behavior: semantic validation now rejects duplicate `match` wildcard arms and rejects non-wildcard arms after a wildcard arm, preventing unreachable-pattern lowering drift.

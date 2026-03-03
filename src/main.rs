@@ -1194,7 +1194,24 @@ fn validate_statements(
                     semantic_index,
                     struct_fields,
                 )?;
+                let mut wildcard_seen = false;
                 for (pattern, body) in arms {
+                    if is_wildcard_match_pattern(pattern) {
+                        if wildcard_seen {
+                            return Err(SemanticError {
+                                offset: stmt.span.start,
+                                message: "match can contain at most one wildcard arm (`_`)"
+                                    .to_string(),
+                            });
+                        }
+                        wildcard_seen = true;
+                    } else if wildcard_seen {
+                        return Err(SemanticError {
+                            offset: stmt.span.start,
+                            message: "non-wildcard match arm cannot appear after wildcard arm (`_`)"
+                                .to_string(),
+                        });
+                    }
                     scopes.push(HashMap::new());
                     let pattern_bindings =
                         collect_pattern_bindings(pattern, scopes, semantic_index);
@@ -1426,6 +1443,15 @@ fn validate_expression(
         }
         Expression::GenericCall(callee, _, args) => {
             validate_expression(callee, offset, scopes, semantic_index, struct_fields)?;
+            if let Some(struct_name) = constructor_name(callee, struct_fields) {
+                return Err(SemanticError {
+                    offset,
+                    message: format!(
+                        "generic arguments are not supported on constructor `{}`",
+                        struct_name
+                    ),
+                });
+            }
             validate_declared_call_arity(callee, args.len(), offset, scopes)?;
             for arg in args {
                 validate_expression(arg, offset, scopes, semantic_index, struct_fields)?;
@@ -2119,6 +2145,10 @@ fn collect_pattern_bindings_inner(
 
 fn expression_is_unique_ref(expr: &crate::ast::Expression) -> bool {
     matches!(expr, crate::ast::Expression::UniqueRef(_))
+}
+
+fn is_wildcard_match_pattern(expr: &crate::ast::Expression) -> bool {
+    matches!(expr, crate::ast::Expression::Ident(name) if name == "_")
 }
 
 fn type_is_unique_ref(ty: &crate::ast::Type) -> bool {

@@ -96,6 +96,8 @@ Core quality checks currently pass:
 - Added semantic validation that non-Rust `from ... import ...` forms are unsupported (including fail-fast diagnostics), keeping local-module imports on plain `import` paths.
 - Aligned file/project graph loading with `from ... import ...` semantics by skipping from-import dependency traversal, so unsupported non-Rust from-imports report semantic errors instead of import-resolution failures.
 - Improved rustc diagnostic translation to use Rust span columns when mapping back to Desert source, yielding more precise Desert column reporting than statement-start-only mapping.
+- Added semantic validation that generic-call syntax on Desert struct constructors is unsupported (`Struct[T](...)`), so `check`/`run` now fail fast with a direct Desert diagnostic instead of producing invalid Rust constructor-call output.
+- Added semantic validation for `match` arm ordering/shape: only one wildcard arm (`_`) is allowed, and no non-wildcard arm may appear after a wildcard arm.
 
 ## Known Gaps
 

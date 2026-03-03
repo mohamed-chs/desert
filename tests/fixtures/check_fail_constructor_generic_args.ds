@@ -1,0 +1,5 @@
+struct Pair:
+    a: i32
+    b: i32
+
+let p = Pair[i32](a = 1, b = 2)

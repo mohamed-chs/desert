@@ -1,0 +1,6 @@
+let x = 1
+match x:
+    _:
+        let a = 1
+    _:
+        let b = 2

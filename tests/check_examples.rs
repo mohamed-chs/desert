@@ -332,6 +332,36 @@ fn check_reports_constructor_missing_fields() {
 }
 
 #[test]
+fn check_reports_constructor_generic_arguments_unsupported() {
+    let mut cmd = cargo_bin_cmd!("desert");
+    cmd.arg("check")
+        .arg("tests/fixtures/check_fail_constructor_generic_args.ds");
+    cmd.assert().failure().stderr(predicates::str::contains(
+        "Semantic error at line 5, column 1: generic arguments are not supported on constructor `Pair`",
+    ));
+}
+
+#[test]
+fn check_reports_duplicate_match_wildcard_arms() {
+    let mut cmd = cargo_bin_cmd!("desert");
+    cmd.arg("check")
+        .arg("tests/fixtures/check_fail_match_duplicate_wildcard_arm.ds");
+    cmd.assert().failure().stderr(predicates::str::contains(
+        "Semantic error at line 2, column 1: match can contain at most one wildcard arm (`_`)",
+    ));
+}
+
+#[test]
+fn check_reports_match_arm_after_wildcard() {
+    let mut cmd = cargo_bin_cmd!("desert");
+    cmd.arg("check")
+        .arg("tests/fixtures/check_fail_match_arm_after_wildcard.ds");
+    cmd.assert().failure().stderr(predicates::str::contains(
+        "Semantic error at line 2, column 1: non-wildcard match arm cannot appear after wildcard arm (`_`)",
+    ));
+}
+
+#[test]
 fn check_reports_nested_import_requires_top_level() {
     let mut cmd = cargo_bin_cmd!("desert");
     cmd.arg("check")
