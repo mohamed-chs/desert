@@ -460,7 +460,8 @@ impl Transpiler {
                 StatementKind::Match { expression, arms } => {
                     let needs_fallback = !Self::match_has_wildcard_arm(arms);
                     if needs_fallback {
-                        let attr = format!("{}#[allow(unreachable_patterns)]\n", "    ".repeat(indent));
+                        let attr =
+                            format!("{}#[allow(unreachable_patterns)]\n", "    ".repeat(indent));
                         output.push_str(&attr);
                         source_map.add_mapping_with_rust_column(
                             *current_line,
@@ -907,24 +908,23 @@ impl Transpiler {
         struct_fields: &HashMap<String, Vec<String>>,
         resolver: &Resolver,
     ) -> String {
-        let mut format_template = String::new();
+        let mut segments: Vec<String> = Vec::new();
         let mut interpolation_args = Vec::new();
         let mut idx = 0;
 
         while let Some(open_rel) = value[idx..].find('{') {
             let open = idx + open_rel;
             let prefix = &value[idx..open];
-            format_template.push_str(prefix);
+            segments.push(prefix.to_string());
 
             if let Some(close_rel) = value[open + 1..].find('}') {
                 let close = open + 1 + close_rel;
                 let placeholder = value[open + 1..close].trim();
 
                 if placeholder.is_empty() {
-                    format_template.push('{');
-                    format_template.push('}');
+                    segments.push("{}".to_string());
                 } else {
-                    format_template.push_str("{:?}");
+                    segments.push("{:?}".to_string());
                     interpolation_args.push(self.transpile_print_placeholder(
                         placeholder,
                         struct_fields,
@@ -934,24 +934,40 @@ impl Transpiler {
 
                 idx = close + 1;
             } else {
-                format_template.push_str(&value[open..]);
+                segments.push(value[open..].to_string());
                 idx = value.len();
             }
         }
 
         if idx < value.len() {
-            format_template.push_str(&value[idx..]);
+            segments.push(value[idx..].to_string());
         }
 
         if interpolation_args.is_empty() {
-            return format!("\"{}\".to_string()", format_template);
+            return format!("\"{}\".to_string()", segments.concat());
         }
+
+        let format_template = segments
+            .iter()
+            .map(|segment| {
+                if segment == "{:?}" {
+                    "{:?}".to_string()
+                } else {
+                    self.escape_rust_format_literal(segment)
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("");
 
         format!(
             "format!(\"{}\", {})",
             format_template,
             interpolation_args.join(", ")
         )
+    }
+
+    fn escape_rust_format_literal(&self, value: &str) -> String {
+        value.replace('{', "{{").replace('}', "}}")
     }
 
     fn transpile_print_placeholder(
@@ -1212,9 +1228,8 @@ impl Transpiler {
     }
 
     fn match_has_wildcard_arm(arms: &[(Expression, Vec<Statement>)]) -> bool {
-        arms.iter().any(|(pattern, _)| {
-            matches!(pattern, Expression::Ident(name) if name == "_")
-        })
+        arms.iter()
+            .any(|(pattern, _)| matches!(pattern, Expression::Ident(name) if name == "_"))
     }
 }
 
@@ -1360,6 +1375,19 @@ mod tests {
         let transpiler = Transpiler::new();
         let (rust_code, _) = transpile_program(&transpiler, &program, input);
         let expected = "fn main() {\n    let mut xs = vec![1, 2, 3];\n    println!(\"{}\", format!(\"head {:?} rest {:?}\", std::mem::take(&mut xs[0]), xs));\n}\n";
+        assert_eq!(rust_code, expected);
+    }
+
+    #[test]
+    fn test_transpile_print_with_literal_braces_and_interpolation() {
+        let input = "def main():\n    $print(\"raw {} value {x}\")";
+        let lexer = Lexer::new(input);
+        let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
+        let (_, program) = parse_program(&tokens).unwrap();
+        let transpiler = Transpiler::new();
+        let (rust_code, _) = transpile_program(&transpiler, &program, input);
+        let expected =
+            "fn main() {\n    println!(\"{}\", format!(\"raw {{}} value {:?}\", x));\n}\n";
         assert_eq!(rust_code, expected);
     }
 
@@ -1690,7 +1718,8 @@ mod tests {
 
     #[test]
     fn test_transpile_match_adds_fallback_when_wildcard_missing() {
-        let input = "def main():\n    let x = 1\n    match x:\n        1:\n            $print(\"one\")";
+        let input =
+            "def main():\n    let x = 1\n    match x:\n        1:\n            $print(\"one\")";
         let lexer = Lexer::new(input);
         let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
         let (_, program) = parse_program(&tokens).unwrap();

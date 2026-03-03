@@ -26,6 +26,7 @@ The design priority is explicit semantics with predictable lowering. Syntax that
   - indexing: `expr[index]`
   - error operators: `?`, `!!`
 - Macros: `$name(...)` (`$print(...)` maps to `println!`)
+  - In `$print` string interpolation, literal `{}` segments are preserved as literal braces; non-empty `{expr}` segments are lowered as debug placeholders
 - Generics:
   - type forms: `List[i32]` -> `Vec<i32>`
   - generic calls: `obj.method[T](arg)` -> `obj.method::<T>(arg)`

@@ -1,0 +1,4 @@
+def main():
+    mut xs = [10, 20, 30]
+    $print("literal {} first {xs[0]}")
+    $print("moved {} second {move xs[1]} rest {xs}")

@@ -1,0 +1,4 @@
+def main():
+    mut xs = [1, 2, 3]
+    $print("raw {} value {xs[0]}")
+    $print("next {} moved {move xs[1]} tail {xs}")

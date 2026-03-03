@@ -126,6 +126,11 @@ fn check_comprehensive_match_pipeline_example() {
 }
 
 #[test]
+fn check_print_format_edges_example() {
+    run_check("print_format_edges.ds");
+}
+
+#[test]
 fn check_reports_translated_diagnostics_for_type_mismatch_fixture() {
     let mut cmd = cargo_bin_cmd!("desert");
     cmd.arg("check")
@@ -764,6 +769,14 @@ fn transpile_fixture_match_fallback_comprehensive_matches_expected() {
     assert_transpile_matches_fixture(
         "tests/fixtures/transpile_ok_match_fallback_comprehensive.ds",
         "tests/fixtures/transpile_ok_match_fallback_comprehensive.rs",
+    );
+}
+
+#[test]
+fn transpile_fixture_print_literal_braces_matches_expected() {
+    assert_transpile_matches_fixture(
+        "tests/fixtures/transpile_ok_print_literal_braces.ds",
+        "tests/fixtures/transpile_ok_print_literal_braces.rs",
     );
 }
 
