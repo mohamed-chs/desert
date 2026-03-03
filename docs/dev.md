@@ -51,6 +51,11 @@ For docs-only edits, full validation is optional.
   - constructor call rewrite (`Type(...)` -> struct literal when applicable)
   - `@` lowers through generated matmul helpers
 - Keep semantic rules in semantic/resolver layers, not ad-hoc string rewrites.
+- Keep backend responsibilities Rust-toolchain-first:
+  - Desert owns frontend semantics (syntax, module/import graph, Desert diagnostics).
+  - `rustc` owns compilation, typing, borrow checking, and codegen.
+  - Cargo owns dependency solving/fetch/build orchestration and lockfile behavior.
+  - Desert should orchestrate the Rust toolchain, not reimplement it.
 
 ## Fast Debug Paths
 

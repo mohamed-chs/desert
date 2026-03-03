@@ -52,7 +52,7 @@ Core quality checks currently pass:
 ## Recent Cleanup
 
 - Improved CLI diagnostics with line/column parser/lexer errors.
-- `check` now uses unique temp directories, `rustc --emit=metadata`, and isolated rustc outputs in temp dirs.
+- Rust-stage `check` now uses unique temp Cargo projects (`cargo check --message-format=json`) and translates compiler diagnostics back to Desert locations.
 - Added a `run` command that compiles to temp executables, translates rustc compile diagnostics through Mirage, and then executes.
 - Added a `fmt` command with parser-backed canonical formatting and `--check` enforcement mode.
 - Added a `doctor` command for preflight environment + source/project validation.

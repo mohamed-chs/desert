@@ -117,7 +117,7 @@ fn main() -> anyhow::Result<()> {
                 let input_source = load_input_source(&input)?;
                 let (rust_code, source_map) = transpile_file(&input_source)?;
 
-                let output = run_rustc_check(&rust_code)?;
+                let output = run_cargo_check(&rust_code)?;
                 let saw_diagnostic = emit_translated_diagnostics(&output, &source_map)?;
 
                 if !output.status.success() {
@@ -135,16 +135,12 @@ fn main() -> anyhow::Result<()> {
             let (rust_code, source_map) = transpile_file(&input_source)?;
 
             with_temp_dir(|temp_dir| {
-                let rs_file = temp_dir.join("main.rs");
-                let binary_file = compiled_binary_path(temp_dir);
-                fs::write(&rs_file, &rust_code)?;
-
-                let output = std::process::Command::new("rustc")
-                    .arg("--edition=2024")
-                    .arg("--error-format=json")
-                    .arg("-o")
-                    .arg(&binary_file)
-                    .arg(&rs_file)
+                let binary_file = write_temp_cargo_project(temp_dir, &rust_code)?;
+                let output = std::process::Command::new("cargo")
+                    .current_dir(temp_dir)
+                    .arg("build")
+                    .arg("--message-format=json")
+                    .arg("--quiet")
                     .output()?;
 
                 let saw_diagnostic = emit_translated_diagnostics(&output, &source_map)?;
@@ -653,6 +649,16 @@ fn run_doctor(input: Option<&Path>) -> anyhow::Result<()> {
     let version_text = String::from_utf8(rustc_version.stdout)?.trim().to_string();
     println!("rustc: {version_text}");
 
+    let cargo_version = std::process::Command::new("cargo")
+        .arg("--version")
+        .output()
+        .map_err(|err| anyhow::anyhow!("failed to execute cargo: {}", err))?;
+    if !cargo_version.status.success() {
+        anyhow::bail!("cargo is installed but not runnable");
+    }
+    let cargo_text = String::from_utf8(cargo_version.stdout)?.trim().to_string();
+    println!("cargo: {cargo_text}");
+
     if let Some(input) = input {
         if input.is_file() {
             let input_source = load_file_source(input)?;
@@ -767,23 +773,31 @@ fn with_temp_dir<T>(f: impl FnOnce(&Path) -> anyhow::Result<T>) -> anyhow::Resul
 
 fn compiled_binary_path(temp_dir: &Path) -> PathBuf {
     if cfg!(windows) {
-        temp_dir.join("desert_program.exe")
+        temp_dir.join("target").join("debug").join("desert_program.exe")
     } else {
-        temp_dir.join("desert_program")
+        temp_dir.join("target").join("debug").join("desert_program")
     }
 }
 
-fn run_rustc_check(rust_code: &str) -> anyhow::Result<std::process::Output> {
+fn write_temp_cargo_project(temp_dir: &Path, rust_code: &str) -> anyhow::Result<PathBuf> {
+    let src_dir = temp_dir.join("src");
+    fs::create_dir_all(&src_dir)?;
+    fs::write(
+        temp_dir.join("Cargo.toml"),
+        "[package]\nname = \"desert_program\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+    )?;
+    fs::write(src_dir.join("main.rs"), rust_code)?;
+    Ok(compiled_binary_path(temp_dir))
+}
+
+fn run_cargo_check(rust_code: &str) -> anyhow::Result<std::process::Output> {
     with_temp_dir(|temp_dir| {
-        let rs_file = temp_dir.join("main.rs");
-        fs::write(&rs_file, rust_code)?;
-        let output = std::process::Command::new("rustc")
-            .arg("--edition=2024")
-            .arg("--error-format=json")
-            .arg("--emit=metadata")
-            .arg("--out-dir")
-            .arg(temp_dir)
-            .arg(&rs_file)
+        write_temp_cargo_project(temp_dir, rust_code)?;
+        let output = std::process::Command::new("cargo")
+            .current_dir(temp_dir)
+            .arg("check")
+            .arg("--message-format=json")
+            .arg("--quiet")
             .output()?;
         Ok(output)
     })
@@ -793,18 +807,40 @@ fn emit_translated_diagnostics(
     output: &std::process::Output,
     source_map: &crate::sourcemap::SourceMap,
 ) -> anyhow::Result<bool> {
+    let stdout = String::from_utf8(output.stdout.clone())?;
     let stderr = String::from_utf8(output.stderr.clone())?;
+    let mut saw_diagnostic = emit_translated_diagnostics_stream(&stdout, source_map);
+    saw_diagnostic |= emit_translated_diagnostics_stream(&stderr, source_map);
+    Ok(saw_diagnostic)
+}
+
+fn emit_translated_diagnostics_stream(
+    stream: &str,
+    source_map: &crate::sourcemap::SourceMap,
+) -> bool {
     let mut saw_diagnostic = false;
-    for line in stderr.lines() {
+    for line in stream.lines() {
+        if let Ok(cargo_msg) = serde_json::from_str::<crate::mirage::CargoMessage>(line) {
+            if let crate::mirage::CargoMessage::CompilerMessage { message } = cargo_msg {
+                let translated = crate::mirage::Mirage::translate_error(&message, source_map);
+                println!("{}", translated);
+                saw_diagnostic = true;
+            }
+            continue;
+        }
+
         if let Ok(msg) = serde_json::from_str::<crate::mirage::Diagnostic>(line) {
             let translated = crate::mirage::Mirage::translate_error(&msg, source_map);
             println!("{}", translated);
             saw_diagnostic = true;
-        } else if !line.trim().is_empty() {
+            continue;
+        }
+
+        if !line.trim().is_empty() {
             eprintln!("{}", line);
         }
     }
-    Ok(saw_diagnostic)
+    saw_diagnostic
 }
 
 fn line_col_from_offset(source: &str, offset: usize) -> (usize, usize) {

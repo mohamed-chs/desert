@@ -102,7 +102,7 @@ desert check --stage semantic
 desert check --stage rust
 ```
 
-Use `syntax` for parser issues, `semantic` for Desert-level validation, `rust` for full rustc-backed checks.
+Use `syntax` for parser issues, `semantic` for Desert-level validation, `rust` for full Rust-toolchain-backed checks (via Cargo).
 
 ### `desert run`
 

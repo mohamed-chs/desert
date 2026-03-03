@@ -70,9 +70,9 @@ The design priority is explicit semantics with predictable lowering. Syntax that
 
 Project mode resolves top-level `import` statements recursively, loads imported files before importers, and rejects import cycles.
 
-`check` transpiles to Rust, runs `rustc --emit=metadata --error-format=json`, and maps diagnostics back to Desert source file+line locations.
+`check` transpiles to Rust, runs `cargo check --message-format=json` (Rust backend), and maps diagnostics back to Desert source file+line locations.
 
-`run` transpiles and compiles to a temp executable, reports translated compile diagnostics on failure, and executes the program directly.
+`run` transpiles to a temporary Cargo project, builds it with Cargo/Rust, reports translated compile diagnostics on failure, and executes the resulting binary directly.
 
 ## Current Limits
 
@@ -86,3 +86,10 @@ Project mode resolves top-level `import` statements recursively, loads imported 
 1. Expand semantic pre-checking before Rust emission.
 2. Deepen Mirage diagnostics with targeted fix hints.
 3. Stabilize a narrow core language before adding new syntax.
+
+## Toolchain Boundary
+
+- Desert is a frontend and orchestration layer.
+- `rustc` is the compilation/type/borrow-checking/codegen backend.
+- Cargo is the dependency/build orchestration backend.
+- Desert should define language semantics, module resolution, and source-aware diagnostics, then delegate backend compiler/build responsibilities to the Rust toolchain.
