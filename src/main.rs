@@ -263,7 +263,10 @@ fn resolve_project_entry(project_root: &Path) -> anyhow::Result<PathBuf> {
         .find(|path| path.is_file());
 
     if manifest_path.is_none() {
-        let fallback_candidates = [project_root.join("src/main.ds"), project_root.join("main.ds")];
+        let fallback_candidates = [
+            project_root.join("src/main.ds"),
+            project_root.join("main.ds"),
+        ];
         if let Some(entry_path) = fallback_candidates.iter().find(|path| path.is_file()) {
             return Ok(entry_path.to_path_buf());
         }
@@ -395,7 +398,12 @@ fn resolve_file_graph(entry_file: &Path) -> anyhow::Result<Vec<PathBuf>> {
     let mut visited = HashSet::new();
     let mut loading = Vec::new();
     let mut ordered_files = Vec::new();
-    collect_file_sources(&canonical_entry, &mut visited, &mut loading, &mut ordered_files)?;
+    collect_file_sources(
+        &canonical_entry,
+        &mut visited,
+        &mut loading,
+        &mut ordered_files,
+    )?;
     Ok(ordered_files)
 }
 
@@ -498,7 +506,13 @@ fn collect_project_sources(
                     continue;
                 }
                 let import_path = resolve_import_path(&canonical_file, path, Some(project_root))?;
-                collect_project_sources(&import_path, project_root, visited, loading, ordered_files)?;
+                collect_project_sources(
+                    &import_path,
+                    project_root,
+                    visited,
+                    loading,
+                    ordered_files,
+                )?;
             }
             crate::ast::StatementKind::FromImport { .. } => {
                 // Non-rust from-import is currently unsupported and is validated
@@ -773,7 +787,10 @@ fn with_temp_dir<T>(f: impl FnOnce(&Path) -> anyhow::Result<T>) -> anyhow::Resul
 
 fn compiled_binary_path(temp_dir: &Path) -> PathBuf {
     if cfg!(windows) {
-        temp_dir.join("target").join("debug").join("desert_program.exe")
+        temp_dir
+            .join("target")
+            .join("debug")
+            .join("desert_program.exe")
     } else {
         temp_dir.join("target").join("debug").join("desert_program")
     }
@@ -930,6 +947,7 @@ fn validate_program(input_content: &str, program: &crate::ast::Program) -> anyho
         &struct_fields,
         0,
         0,
+        0,
         true,
     )
     .map_err(|err| {
@@ -1022,6 +1040,7 @@ fn validate_statements(
     struct_fields: &HashMap<String, Vec<String>>,
     nesting_depth: usize,
     function_depth: usize,
+    loop_depth: usize,
     predeclare_defs: bool,
 ) -> Result<(), SemanticError> {
     if predeclare_defs {
@@ -1112,6 +1131,7 @@ fn validate_statements(
                     struct_fields,
                     nesting_depth + 1,
                     function_depth + 1,
+                    loop_depth,
                     true,
                 )?;
                 scopes.pop();
@@ -1136,6 +1156,7 @@ fn validate_statements(
                     struct_fields,
                     nesting_depth + 1,
                     function_depth,
+                    loop_depth,
                     true,
                 )?;
                 scopes.pop();
@@ -1148,6 +1169,7 @@ fn validate_statements(
                         struct_fields,
                         nesting_depth + 1,
                         function_depth,
+                        loop_depth,
                         true,
                     )?;
                     scopes.pop();
@@ -1182,6 +1204,28 @@ fn validate_statements(
                     struct_fields,
                     nesting_depth + 1,
                     function_depth,
+                    loop_depth + 1,
+                    true,
+                )?;
+                scopes.pop();
+            }
+            StatementKind::While { condition, body } => {
+                validate_expression(
+                    condition,
+                    stmt.span.start,
+                    scopes,
+                    semantic_index,
+                    struct_fields,
+                )?;
+                scopes.push(HashMap::new());
+                validate_statements(
+                    body,
+                    scopes,
+                    semantic_index,
+                    struct_fields,
+                    nesting_depth + 1,
+                    function_depth,
+                    loop_depth + 1,
                     true,
                 )?;
                 scopes.pop();
@@ -1208,8 +1252,9 @@ fn validate_statements(
                     } else if wildcard_seen {
                         return Err(SemanticError {
                             offset: stmt.span.start,
-                            message: "non-wildcard match arm cannot appear after wildcard arm (`_`)"
-                                .to_string(),
+                            message:
+                                "non-wildcard match arm cannot appear after wildcard arm (`_`)"
+                                    .to_string(),
                         });
                     }
                     scopes.push(HashMap::new());
@@ -1249,6 +1294,7 @@ fn validate_statements(
                         struct_fields,
                         nesting_depth + 1,
                         function_depth,
+                        loop_depth,
                         true,
                     )?;
                     scopes.pop();
@@ -1287,6 +1333,7 @@ fn validate_statements(
                     struct_fields,
                     nesting_depth + 1,
                     function_depth,
+                    loop_depth,
                     false,
                 )?;
             }
@@ -1308,6 +1355,7 @@ fn validate_statements(
                     struct_fields,
                     nesting_depth + 1,
                     function_depth,
+                    loop_depth,
                     false,
                 )?;
             }
@@ -1400,6 +1448,23 @@ fn validate_statements(
                 }
             }
             StatementKind::PyImport(_) => {}
+            StatementKind::Break => {
+                if loop_depth == 0 {
+                    return Err(SemanticError {
+                        offset: stmt.span.start,
+                        message: "`break` is only allowed inside `for`/`while` bodies".to_string(),
+                    });
+                }
+            }
+            StatementKind::Continue => {
+                if loop_depth == 0 {
+                    return Err(SemanticError {
+                        offset: stmt.span.start,
+                        message: "`continue` is only allowed inside `for`/`while` bodies"
+                            .to_string(),
+                    });
+                }
+            }
         }
     }
     Ok(())
@@ -1474,6 +1539,7 @@ fn validate_expression(
         }
         Expression::MemberAccess(inner, _)
         | Expression::SharedRef(inner)
+        | Expression::Not(inner)
         | Expression::Question(inner)
         | Expression::Unwrap(inner) => {
             validate_expression(inner, offset, scopes, semantic_index, struct_fields)
@@ -1667,8 +1733,7 @@ fn predeclare_block_symbols(
                 );
             }
             crate::ast::StatementKind::Import { path, alias } => {
-                let Some(use_path) =
-                    crate::imports::rust_use_from_import(path, alias.as_deref())
+                let Some(use_path) = crate::imports::rust_use_from_import(path, alias.as_deref())
                 else {
                     continue;
                 };
@@ -2131,6 +2196,7 @@ fn collect_pattern_bindings_inner(
         | crate::ast::Expression::Move(inner)
         | crate::ast::Expression::SharedRef(inner)
         | crate::ast::Expression::UniqueRef(inner)
+        | crate::ast::Expression::Not(inner)
         | crate::ast::Expression::Question(inner)
         | crate::ast::Expression::Unwrap(inner) => {
             collect_pattern_bindings_inner(inner, scopes, semantic_index, bindings);

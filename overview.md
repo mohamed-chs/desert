@@ -6,7 +6,7 @@ The design priority is explicit semantics with predictable lowering. Syntax that
 
 ## Current Language Surface
 
-- Blocks: `if`, `for`, `def`, `struct`, `protocol`, `impl`, `match`
+- Blocks: `if`/`elif`/`else`, `for`, `while`, `def`, `struct`, `protocol`, `impl`, `match`
 - Imports: `import "relative/path.ds"` and `import dotted.module` (resolved relative to the importing file, `.ds` default extension), plus Rust `use` passthrough via `import rust.std.cmp.max`, `import rust.std.collections.HashMap as Map`, `from rust.std.cmp import max as maximum, min`, or `import "rust:std::cmp::max"` (`std`/`core`/`alloc` roots)
   - `from ... import ...` now rejects duplicate imported items and duplicate introduced local names within a single statement
   - Non-Rust `from ... import ...` forms are rejected during semantic validation; use plain `import "path"` for local Desert modules
@@ -20,6 +20,8 @@ The design priority is explicit semantics with predictable lowering. Syntax that
   - Assignment pre-checks require place-form left-hand sides (`x`, `obj.field`, `items[i]`) and enforce mutable/write-through roots before Rust emission
 - Operators:
   - arithmetic: `+`, `-`, `*`, `/`
+  - modulo: `%`
+  - logic: `and`, `or`, `not`
   - comparisons: `==`, `!=`, `<`, `<=`, `>`, `>=`
   - assignment expression: `=`
   - matrix operator: `@` lowering via generated `desert_matmul(...)` helpers
@@ -51,6 +53,9 @@ The design priority is explicit semantics with predictable lowering. Syntax that
 - Unified dot resolution with scoped type/value tracking:
   - static call: `Type.new()` -> `Type::new()`
   - method call: `value.method()` -> `value.method()`
+- Loop control:
+  - `break` and `continue` are supported inside `for`/`while` bodies
+  - `break`/`continue` outside loops fail during semantic validation
 
 ## CLI
 

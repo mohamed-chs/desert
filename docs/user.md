@@ -236,6 +236,8 @@ Rules:
 ### Operators
 
 - Arithmetic: `+ - * /`
+- Modulo: `%`
+- Logic: `and or not`
 - Comparison: `== != < <= > >=`
 - Assignment: `=`
 - Matrix multiply: `@`
@@ -258,6 +260,18 @@ match value:
         $print("{node}")
     None:
         $print("empty")
+
+### While / Loop Control
+
+```python
+mut i = 0
+while i < 10:
+    i = i + 1
+    if i % 2 == 0:
+        continue
+    if i == 9:
+        break
+```
 ```
 
 Pattern binders are scoped to their arm body.

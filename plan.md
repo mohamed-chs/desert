@@ -55,3 +55,4 @@ This roadmap follows current project direction: prioritize project workflow and 
 - Recent shipped behavior: rustc-backed diagnostics now map Desert columns using span-column offsets per generated Rust line (instead of always reporting statement-start columns).
 - Recent shipped behavior: semantic validation now rejects generic-call syntax on Desert struct constructors (for example `Pair[i32](...)`) with a direct Desert error, avoiding invalid Rust constructor-call fallback.
 - Recent shipped behavior: semantic validation now rejects duplicate `match` wildcard arms and rejects non-wildcard arms after a wildcard arm, preventing unreachable-pattern lowering drift.
+- Recent shipped behavior: language control-flow now includes `while`, `break`, and `continue` (with semantic checks that loop-control stays inside loop bodies), plus logical operators (`and`/`or`/`not`), modulo (`%`), and `elif` chaining.

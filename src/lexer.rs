@@ -20,6 +20,8 @@ pub enum Token {
     Impl,
     #[token("for")]
     For,
+    #[token("while")]
+    While,
     #[token("in")]
     In,
     #[token("if")]
@@ -28,6 +30,18 @@ pub enum Token {
     Else,
     #[token("return")]
     Return,
+    #[token("break")]
+    Break,
+    #[token("continue")]
+    Continue,
+    #[token("elif")]
+    Elif,
+    #[token("and")]
+    And,
+    #[token("or")]
+    Or,
+    #[token("not")]
+    Not,
     #[token("import")]
     Import,
     #[token("pyimport")]
@@ -88,6 +102,8 @@ pub enum Token {
     Minus,
     #[token("*")]
     Star,
+    #[token("%")]
+    Percent,
     #[token("/")]
     Slash,
 

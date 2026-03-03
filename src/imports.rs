@@ -82,10 +82,7 @@ mod tests {
 
     #[test]
     fn rust_import_binding_extracts_leaf() {
-        assert_eq!(
-            rust_import_binding_name("std::cmp::max"),
-            Some("max")
-        );
+        assert_eq!(rust_import_binding_name("std::cmp::max"), Some("max"));
         assert_eq!(
             rust_import_binding_name("std::collections::HashMap as Map"),
             Some("Map")

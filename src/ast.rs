@@ -21,7 +21,10 @@ pub enum BinaryOp {
     Add,
     Sub,
     Mul,
+    Mod,
     Div,
+    And,
+    Or,
     Assign,
     Eq,
     Ne,
@@ -44,6 +47,7 @@ pub enum Expression {
     Move(Box<Expression>),
     SharedRef(Box<Expression>),
     UniqueRef(Box<Expression>),
+    Not(Box<Expression>),
     Question(Box<Expression>),               // ?
     Unwrap(Box<Expression>),                 // !!
     Index(Box<Expression>, Box<Expression>), // expr[index]
@@ -104,6 +108,10 @@ pub enum StatementKind {
         iterable: Expression,
         body: Vec<Statement>,
     },
+    While {
+        condition: Expression,
+        body: Vec<Statement>,
+    },
     Struct {
         name: String,
         fields: Vec<Param>,
@@ -123,6 +131,8 @@ pub enum StatementKind {
     },
     PyImport(String), // The whole block as a string for now
     Return(Option<Expression>),
+    Break,
+    Continue,
     Expr(Expression),
 }
 

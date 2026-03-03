@@ -319,6 +319,45 @@ impl Transpiler {
                     );
                     *current_line += 1;
                 }
+                StatementKind::While { condition, body } => {
+                    let indent_str = "    ".repeat(indent);
+                    let header = format!(
+                        "{}while {} {{\n",
+                        indent_str,
+                        self.transpile_expression(condition, struct_fields, resolver)
+                    );
+                    output.push_str(&header);
+                    source_map.add_mapping_with_rust_column(
+                        *current_line,
+                        stmt_location.clone(),
+                        rust_line_start_column(&header),
+                    );
+                    *current_line += 1;
+
+                    resolver.enter_scope();
+                    self.transpile_statements(
+                        body,
+                        indent + 1,
+                        source,
+                        line_origins,
+                        struct_fields,
+                        protocol_names,
+                        resolver,
+                        output,
+                        source_map,
+                        current_line,
+                    );
+                    resolver.leave_scope();
+
+                    let footer = format!("{}}}\n", indent_str);
+                    output.push_str(&footer);
+                    source_map.add_mapping_with_rust_column(
+                        *current_line,
+                        stmt_location.clone(),
+                        rust_line_start_column(&footer),
+                    );
+                    *current_line += 1;
+                }
                 StatementKind::Struct { name, fields } => {
                     let indent_str = "    ".repeat(indent);
                     let header = format!("{}struct {} {{\n", indent_str, name);
@@ -627,6 +666,8 @@ impl Transpiler {
             StatementKind::Return(None) => {
                 format!("{}return;\n", indent_str)
             }
+            StatementKind::Break => format!("{}break;\n", indent_str),
+            StatementKind::Continue => format!("{}continue;\n", indent_str),
             StatementKind::PyImport(content) => {
                 format!("{}/* Desert PyImport block: {} */\n", indent_str, content)
             }
@@ -718,7 +759,10 @@ impl Transpiler {
                     BinaryOp::Add => "+",
                     BinaryOp::Sub => "-",
                     BinaryOp::Mul => "*",
+                    BinaryOp::Mod => "%",
                     BinaryOp::Div => "/",
+                    BinaryOp::And => "&&",
+                    BinaryOp::Or => "||",
                     BinaryOp::Assign => "=",
                     BinaryOp::Eq => "==",
                     BinaryOp::Ne => "!=",
@@ -809,6 +853,14 @@ impl Transpiler {
                     self.transpile_expression(expr, struct_fields, resolver)
                 )
             }
+            Expression::Not(expr) => {
+                let inner = self.transpile_expression(expr, struct_fields, resolver);
+                if matches!(expr.as_ref(), Expression::BinaryOp(_, _, _)) {
+                    format!("!({inner})")
+                } else {
+                    format!("!{inner}")
+                }
+            }
             Expression::Question(expr) => {
                 format!(
                     "{}?",
@@ -834,14 +886,16 @@ impl Transpiler {
     fn binary_precedence(&self, op: &BinaryOp) -> u8 {
         match op {
             BinaryOp::Assign => 1,
+            BinaryOp::Or => 2,
+            BinaryOp::And => 3,
             BinaryOp::Eq
             | BinaryOp::Ne
             | BinaryOp::Gt
             | BinaryOp::Lt
             | BinaryOp::Ge
-            | BinaryOp::Le => 2,
-            BinaryOp::Add | BinaryOp::Sub => 3,
-            BinaryOp::Mul | BinaryOp::Div | BinaryOp::MatMul => 4,
+            | BinaryOp::Le => 4,
+            BinaryOp::Add | BinaryOp::Sub => 5,
+            BinaryOp::Mul | BinaryOp::Div | BinaryOp::Mod | BinaryOp::MatMul => 6,
         }
     }
 
@@ -1136,6 +1190,7 @@ impl Transpiler {
                         .is_some_and(|block| self.statement_block_has_value_return(block))
             }
             StatementKind::For { body, .. }
+            | StatementKind::While { body, .. }
             | StatementKind::Def { body, .. }
             | StatementKind::Protocol { methods: body, .. }
             | StatementKind::Impl { methods: body, .. } => {
@@ -1176,6 +1231,10 @@ impl Transpiler {
                 self.expression_uses_matmul(iterable)
                     || body.iter().any(|s| self.statement_uses_matmul(s))
             }
+            StatementKind::While { condition, body } => {
+                self.expression_uses_matmul(condition)
+                    || body.iter().any(|s| self.statement_uses_matmul(s))
+            }
             StatementKind::Protocol { methods, .. } | StatementKind::Impl { methods, .. } => {
                 methods.iter().any(|s| self.statement_uses_matmul(s))
             }
@@ -1193,7 +1252,9 @@ impl Transpiler {
             | StatementKind::Import { .. }
             | StatementKind::FromImport { .. }
             | StatementKind::PyImport(_)
-            | StatementKind::Return(None) => false,
+            | StatementKind::Return(None)
+            | StatementKind::Break
+            | StatementKind::Continue => false,
         }
     }
 
@@ -1215,6 +1276,7 @@ impl Transpiler {
             | Expression::Move(expr)
             | Expression::SharedRef(expr)
             | Expression::UniqueRef(expr)
+            | Expression::Not(expr)
             | Expression::Question(expr)
             | Expression::Unwrap(expr) => self.expression_uses_matmul(expr),
             Expression::Index(expr, idx) => {

@@ -13,10 +13,7 @@ fn format_statement(stmt: &Statement, indent: usize, out: &mut String) {
     match &stmt.kind {
         StatementKind::Import { path, alias } => {
             if let Some(alias) = alias {
-                out.push_str(&format!(
-                    "{}import \"{}\" as {}\n",
-                    indent_str, path, alias
-                ));
+                out.push_str(&format!("{}import \"{}\" as {}\n", indent_str, path, alias));
             } else {
                 out.push_str(&format!("{}import \"{}\"\n", indent_str, path));
             }
@@ -103,6 +100,14 @@ fn format_statement(stmt: &Statement, indent: usize, out: &mut String) {
             ));
             format_block(body, indent + 1, out);
         }
+        StatementKind::While { condition, body } => {
+            out.push_str(&format!(
+                "{}while {}:\n",
+                indent_str,
+                format_expression(condition, 0)
+            ));
+            format_block(body, indent + 1, out);
+        }
         StatementKind::Struct { name, fields } => {
             out.push_str(&format!("{}struct {}:\n", indent_str, name));
             for field in fields {
@@ -155,7 +160,11 @@ fn format_statement(stmt: &Statement, indent: usize, out: &mut String) {
         }
         StatementKind::PyImport(content) => {
             out.push_str(&format!("{}pyimport:\n", indent_str));
-            out.push_str(&format!("{}{}\n", "    ".repeat(indent + 1), content.trim()));
+            out.push_str(&format!(
+                "{}{}\n",
+                "    ".repeat(indent + 1),
+                content.trim()
+            ));
         }
         StatementKind::Return(expr) => {
             if let Some(expr) = expr {
@@ -168,6 +177,8 @@ fn format_statement(stmt: &Statement, indent: usize, out: &mut String) {
                 out.push_str(&format!("{}return\n", indent_str));
             }
         }
+        StatementKind::Break => out.push_str(&format!("{}break\n", indent_str)),
+        StatementKind::Continue => out.push_str(&format!("{}continue\n", indent_str)),
         StatementKind::Expr(expr) => {
             out.push_str(&format!("{}{}\n", indent_str, format_expression(expr, 0)));
         }
@@ -194,7 +205,8 @@ fn format_param(param: &Param) -> String {
 }
 
 fn format_type_suffix(ty: Option<&Type>) -> String {
-    ty.map(|t| format!(": {}", format_type(t))).unwrap_or_default()
+    ty.map(|t| format!(": {}", format_type(t)))
+        .unwrap_or_default()
 }
 
 fn format_type(ty: &Type) -> String {
@@ -269,6 +281,7 @@ fn format_expression(expr: &Expression, parent_prec: u8) -> String {
         Expression::Move(inner) => format!("move {}", format_expression(inner, prec)),
         Expression::SharedRef(inner) => format!("&{}", format_expression(inner, prec)),
         Expression::UniqueRef(inner) => format!("~{}", format_expression(inner, prec)),
+        Expression::Not(inner) => format!("not {}", format_expression(inner, prec)),
         Expression::Question(inner) => format!("{}?", format_expression(inner, prec)),
         Expression::Unwrap(inner) => format!("{}!!", format_expression(inner, prec)),
         Expression::Index(target, index) => format!(
@@ -288,23 +301,28 @@ fn expression_precedence(expr: &Expression) -> u8 {
     match expr {
         Expression::BinaryOp(_, op, _) => match op {
             BinaryOp::Assign => 1,
+            BinaryOp::Or => 2,
+            BinaryOp::And => 3,
             BinaryOp::Eq
             | BinaryOp::Ne
             | BinaryOp::Gt
             | BinaryOp::Lt
             | BinaryOp::Ge
-            | BinaryOp::Le => 2,
-            BinaryOp::Add | BinaryOp::Sub => 3,
-            BinaryOp::Mul | BinaryOp::Div | BinaryOp::MatMul => 4,
+            | BinaryOp::Le => 4,
+            BinaryOp::Add | BinaryOp::Sub => 5,
+            BinaryOp::Mul | BinaryOp::Div | BinaryOp::Mod | BinaryOp::MatMul => 6,
         },
-        Expression::Move(_) | Expression::SharedRef(_) | Expression::UniqueRef(_) => 5,
+        Expression::Move(_)
+        | Expression::SharedRef(_)
+        | Expression::UniqueRef(_)
+        | Expression::Not(_) => 7,
         Expression::Call(_, _)
         | Expression::GenericCall(_, _, _)
         | Expression::MemberAccess(_, _)
         | Expression::Question(_)
         | Expression::Unwrap(_)
-        | Expression::Index(_, _) => 6,
-        Expression::Literal(_) | Expression::Ident(_) | Expression::MacroCall(_, _) => 7,
+        | Expression::Index(_, _) => 8,
+        Expression::Literal(_) | Expression::Ident(_) | Expression::MacroCall(_, _) => 9,
     }
 }
 
@@ -313,7 +331,10 @@ fn binary_op_text(op: &BinaryOp) -> &'static str {
         BinaryOp::Add => "+",
         BinaryOp::Sub => "-",
         BinaryOp::Mul => "*",
+        BinaryOp::Mod => "%",
         BinaryOp::Div => "/",
+        BinaryOp::And => "and",
+        BinaryOp::Or => "or",
         BinaryOp::Assign => "=",
         BinaryOp::Eq => "==",
         BinaryOp::Ne => "!=",

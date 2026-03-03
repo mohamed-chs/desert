@@ -26,11 +26,13 @@ Core quality checks currently pass:
 
 - Declarations: `let`, `mut`
 - Control flow: `if/else`, `for`, `match`
+- Control flow: `if`/`elif`/`else`, `for`, `while`, `match`, `break`, `continue`
 - Definitions: `def`, `struct`, `protocol`, `impl`
 - Expressions: literals, calls, member access, generic calls, indexing, assignment
 - Imports: top-level `import` statements for both single-file and project inputs
 - Rust use passthrough imports: `import rust.std...` and `import "rust:std::..."` lower to `use ...;` (currently `std`/`core`/`alloc`)
 - Ownership/error syntax: `move`, `&`, `~`, `?`, `!!`
+- Logic/modulo syntax: `and`, `or`, `not`, `%`
 - Macros: `$name(...)` with `$print` -> `println!`
 - `pyimport` blocks: parsed and emitted as Rust comments
 
@@ -98,6 +100,9 @@ Core quality checks currently pass:
 - Improved rustc diagnostic translation to use Rust span columns when mapping back to Desert source, yielding more precise Desert column reporting than statement-start-only mapping.
 - Added semantic validation that generic-call syntax on Desert struct constructors is unsupported (`Struct[T](...)`), so `check`/`run` now fail fast with a direct Desert diagnostic instead of producing invalid Rust constructor-call output.
 - Added semantic validation for `match` arm ordering/shape: only one wildcard arm (`_`) is allowed, and no non-wildcard arm may appear after a wildcard arm.
+- Added parser/transpiler support for `while` loops and loop-control statements (`break`, `continue`), plus semantic validation that `break`/`continue` are loop-only.
+- Added parser/transpiler support for logical operators (`and`, `or`, `not`) and modulo (`%`) with Rust lowering (`&&`, `||`, `!`, `%`).
+- Added `elif` parsing as nested conditional lowering for multi-branch `if` chains.
 
 ## Known Gaps
 

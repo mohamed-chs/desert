@@ -131,6 +131,11 @@ fn check_print_format_edges_example() {
 }
 
 #[test]
+fn check_control_flow_logic_example() {
+    run_check("control_flow_logic.ds");
+}
+
+#[test]
 fn check_reports_translated_diagnostics_for_type_mismatch_fixture() {
     let mut cmd = cargo_bin_cmd!("desert");
     cmd.arg("check")
@@ -477,6 +482,26 @@ fn check_reports_return_outside_def() {
 }
 
 #[test]
+fn check_reports_break_outside_loop() {
+    let mut cmd = cargo_bin_cmd!("desert");
+    cmd.arg("check")
+        .arg("tests/fixtures/check_fail_break_outside_loop.ds");
+    cmd.assert().failure().stderr(predicates::str::contains(
+        "Semantic error at line 2, column 5: `break` is only allowed inside `for`/`while` bodies",
+    ));
+}
+
+#[test]
+fn check_reports_continue_outside_loop() {
+    let mut cmd = cargo_bin_cmd!("desert");
+    cmd.arg("check")
+        .arg("tests/fixtures/check_fail_continue_outside_loop.ds");
+    cmd.assert().failure().stderr(predicates::str::contains(
+        "Semantic error at line 2, column 5: `continue` is only allowed inside `for`/`while` bodies",
+    ));
+}
+
+#[test]
 fn check_reports_duplicate_function_parameters() {
     let mut cmd = cargo_bin_cmd!("desert");
     cmd.arg("check")
@@ -807,6 +832,14 @@ fn transpile_fixture_print_literal_braces_matches_expected() {
     assert_transpile_matches_fixture(
         "tests/fixtures/transpile_ok_print_literal_braces.ds",
         "tests/fixtures/transpile_ok_print_literal_braces.rs",
+    );
+}
+
+#[test]
+fn transpile_fixture_control_flow_logic_matches_expected() {
+    assert_transpile_matches_fixture(
+        "tests/fixtures/transpile_ok_control_flow_logic.ds",
+        "tests/fixtures/transpile_ok_control_flow_logic.rs",
     );
 }
 

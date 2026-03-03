@@ -1,0 +1,12 @@
+def main():
+    mut x = 0
+    mut total = 0
+    while x < 10:
+        x = x + 1
+        if x % 2 == 0 and not (x == 6):
+            continue
+        elif x == 9 or x == 10:
+            break
+        else:
+            total = total + x
+    $print("total {total} x {x}")

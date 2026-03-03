@@ -78,6 +78,10 @@ fn float_lit(input: &[TokenSpan]) -> ParseResult<'_, f64> {
 }
 
 fn primary_expression(input: &[TokenSpan]) -> ParseResult<'_, Expression> {
+    if let Ok((rest, _)) = token(Token::Not)(input) {
+        let (rest, expr) = primary_expression(rest)?;
+        return Ok((rest, Expression::Not(Box::new(expr))));
+    }
     if let Ok((rest, _)) = token(Token::Minus)(input) {
         let (rest, expr) = primary_expression(rest)?;
         if let Expression::Literal(Literal::Int(i)) = expr {
@@ -291,6 +295,7 @@ fn multiplicative_expression(input: &[TokenSpan]) -> ParseResult<'_, Expression>
     while let Some(((first, _), rest)) = current_input.split_first() {
         let op = match first {
             Token::Star => BinaryOp::Mul,
+            Token::Percent => BinaryOp::Mod,
             Token::Slash => BinaryOp::Div,
             Token::At => BinaryOp::MatMul,
             _ => break,
@@ -336,8 +341,28 @@ fn comparison_expression(input: &[TokenSpan]) -> ParseResult<'_, Expression> {
     Ok((current_input, left))
 }
 
+fn logical_and_expression(input: &[TokenSpan]) -> ParseResult<'_, Expression> {
+    let (mut current_input, mut left) = comparison_expression(input)?;
+    while let Some(((Token::And, _), rest)) = current_input.split_first() {
+        let (next_input, right) = comparison_expression(rest)?;
+        left = Expression::BinaryOp(Box::new(left), BinaryOp::And, Box::new(right));
+        current_input = next_input;
+    }
+    Ok((current_input, left))
+}
+
+fn logical_or_expression(input: &[TokenSpan]) -> ParseResult<'_, Expression> {
+    let (mut current_input, mut left) = logical_and_expression(input)?;
+    while let Some(((Token::Or, _), rest)) = current_input.split_first() {
+        let (next_input, right) = logical_and_expression(rest)?;
+        left = Expression::BinaryOp(Box::new(left), BinaryOp::Or, Box::new(right));
+        current_input = next_input;
+    }
+    Ok((current_input, left))
+}
+
 fn assignment_expression(input: &[TokenSpan]) -> ParseResult<'_, Expression> {
-    let (input, left) = comparison_expression(input)?;
+    let (input, left) = logical_or_expression(input)?;
     if let Ok((rest, _)) = token(Token::Assign)(input) {
         let (rest, right) = assignment_expression(rest)?;
         return Ok((
@@ -410,13 +435,7 @@ fn import_statement(input: &[TokenSpan]) -> ParseResult<'_, StatementKind> {
         current_input = next_input;
     }
 
-    Ok((
-        current_input,
-        StatementKind::Import {
-            path,
-            alias,
-        },
-    ))
+    Ok((current_input, StatementKind::Import { path, alias }))
 }
 
 fn from_import_statement(input: &[TokenSpan]) -> ParseResult<'_, StatementKind> {
@@ -547,12 +566,33 @@ fn if_statement(input: &[TokenSpan]) -> ParseResult<'_, StatementKind> {
     let (input, then_block) = block(input)?;
 
     let mut current_input = input;
+    let mut elif_branches = Vec::new();
+    while let Ok((next_input, _)) = token(Token::Elif)(current_input) {
+        let (next_input, elif_condition) = expression(next_input)?;
+        let (next_input, _) = token(Token::Colon)(next_input)?;
+        let (next_input, elif_then_block) = block(next_input)?;
+        elif_branches.push((elif_condition, elif_then_block));
+        current_input = next_input;
+    }
+
     let mut else_block = None;
     if let Ok((next_input, _)) = token(Token::Else)(current_input) {
         let (next_input, _) = token(Token::Colon)(next_input)?;
         let (next_input, block) = block(next_input)?;
         else_block = Some(block);
         current_input = next_input;
+    }
+
+    for (elif_condition, elif_then_block) in elif_branches.into_iter().rev() {
+        let nested = Statement {
+            kind: StatementKind::If {
+                condition: elif_condition,
+                then_block: elif_then_block,
+                else_block,
+            },
+            span: 0..0,
+        };
+        else_block = Some(vec![nested]);
     }
 
     Ok((
@@ -666,15 +706,22 @@ fn token_text(token: &Token) -> String {
         Token::Struct => "struct".to_string(),
         Token::Impl => "impl".to_string(),
         Token::For => "for".to_string(),
+        Token::While => "while".to_string(),
         Token::In => "in".to_string(),
         Token::If => "if".to_string(),
+        Token::Elif => "elif".to_string(),
         Token::Else => "else".to_string(),
         Token::Return => "return".to_string(),
+        Token::Break => "break".to_string(),
+        Token::Continue => "continue".to_string(),
         Token::Import => "import".to_string(),
         Token::PyImport => "pyimport".to_string(),
         Token::Match => "match".to_string(),
         Token::As => "as".to_string(),
         Token::From => "from".to_string(),
+        Token::And => "and".to_string(),
+        Token::Or => "or".to_string(),
+        Token::Not => "not".to_string(),
         Token::Colon => ":".to_string(),
         Token::Arrow => "->".to_string(),
         Token::Question => "?".to_string(),
@@ -699,6 +746,7 @@ fn token_text(token: &Token) -> String {
         Token::Plus => "+".to_string(),
         Token::Minus => "-".to_string(),
         Token::Star => "*".to_string(),
+        Token::Percent => "%".to_string(),
         Token::Slash => "/".to_string(),
         Token::Ident(name) => name.clone(),
         Token::Float(value) => value.to_string(),
@@ -759,6 +807,24 @@ fn for_statement(input: &[TokenSpan]) -> ParseResult<'_, StatementKind> {
     ))
 }
 
+fn while_statement(input: &[TokenSpan]) -> ParseResult<'_, StatementKind> {
+    let (input, _) = token(Token::While)(input)?;
+    let (input, condition) = expression(input)?;
+    let (input, _) = token(Token::Colon)(input)?;
+    let (input, body) = block(input)?;
+    Ok((input, StatementKind::While { condition, body }))
+}
+
+fn break_statement(input: &[TokenSpan]) -> ParseResult<'_, StatementKind> {
+    let (input, _) = token(Token::Break)(input)?;
+    Ok((input, StatementKind::Break))
+}
+
+fn continue_statement(input: &[TokenSpan]) -> ParseResult<'_, StatementKind> {
+    let (input, _) = token(Token::Continue)(input)?;
+    Ok((input, StatementKind::Continue))
+}
+
 fn statement(input: &[TokenSpan]) -> ParseResult<'_, Statement> {
     let start_span = input.first().map(|(_, s)| s.clone()).unwrap_or(0..0);
 
@@ -777,6 +843,12 @@ fn statement(input: &[TokenSpan]) -> ParseResult<'_, Statement> {
     } else if let Ok((rest, kind)) = if_statement(input) {
         (rest, kind)
     } else if let Ok((rest, kind)) = for_statement(input) {
+        (rest, kind)
+    } else if let Ok((rest, kind)) = while_statement(input) {
+        (rest, kind)
+    } else if let Ok((rest, kind)) = break_statement(input) {
+        (rest, kind)
+    } else if let Ok((rest, kind)) = continue_statement(input) {
         (rest, kind)
     } else if let Ok((rest, kind)) = struct_statement(input) {
         (rest, kind)
