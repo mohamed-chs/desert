@@ -497,7 +497,7 @@ impl Transpiler {
                 }
                 StatementKind::Import { .. } | StatementKind::FromImport { .. } => {}
                 StatementKind::Match { expression, arms } => {
-                    let needs_fallback = !Self::match_has_wildcard_arm(arms);
+                    let needs_fallback = Self::match_needs_fallback(arms);
                     if needs_fallback {
                         let attr =
                             format!("{}#[allow(unreachable_patterns)]\n", "    ".repeat(indent));
@@ -673,7 +673,7 @@ impl Transpiler {
             }
             StatementKind::Import { .. } | StatementKind::FromImport { .. } => String::new(),
             StatementKind::Match { expression, arms } => {
-                let needs_fallback = !Self::match_has_wildcard_arm(arms);
+                let needs_fallback = Self::match_needs_fallback(arms);
                 let mut output = String::new();
                 if needs_fallback {
                     output.push_str(&format!("{}#[allow(unreachable_patterns)]\n", indent_str));
@@ -1299,6 +1299,52 @@ impl Transpiler {
         arms.iter()
             .any(|(pattern, _)| matches!(pattern, Expression::Ident(name) if name == "_"))
     }
+
+    fn match_needs_fallback(arms: &[(Expression, Vec<Statement>)]) -> bool {
+        !Self::match_is_obviously_exhaustive(arms)
+    }
+
+    fn match_is_obviously_exhaustive(arms: &[(Expression, Vec<Statement>)]) -> bool {
+        if Self::match_has_wildcard_arm(arms) {
+            return true;
+        }
+
+        let mut has_true = false;
+        let mut has_false = false;
+        let mut has_some = false;
+        let mut has_none = false;
+        let mut has_ok = false;
+        let mut has_err = false;
+
+        for (pattern, _) in arms {
+            match pattern {
+                Expression::Ident(name) if name == "true" => has_true = true,
+                Expression::Ident(name) if name == "false" => has_false = true,
+                Expression::Ident(name) if name == "None" => has_none = true,
+                Expression::Call(callee, args)
+                    if matches!(callee.as_ref(), Expression::Ident(name) if name == "Some")
+                        && args.len() == 1 =>
+                {
+                    has_some = true;
+                }
+                Expression::Call(callee, args)
+                    if matches!(callee.as_ref(), Expression::Ident(name) if name == "Ok")
+                        && args.len() == 1 =>
+                {
+                    has_ok = true;
+                }
+                Expression::Call(callee, args)
+                    if matches!(callee.as_ref(), Expression::Ident(name) if name == "Err")
+                        && args.len() == 1 =>
+                {
+                    has_err = true;
+                }
+                _ => {}
+            }
+        }
+
+        (has_true && has_false) || (has_some && has_none) || (has_ok && has_err)
+    }
 }
 
 impl Default for Transpiler {
@@ -1817,5 +1863,47 @@ mod tests {
         let transpiler = Transpiler::new();
         let (rust_code, _) = transpile_program(&transpiler, &program, input);
         assert_eq!(rust_code.matches("_ => {").count(), 1);
+    }
+
+    #[test]
+    fn test_transpile_match_option_arms_do_not_add_fallback() {
+        let input =
+            "def main():\n    let maybe = Some(1)\n    match maybe:\n        Some(v):\n            $print(v)\n        None:\n            $print(\"none\")";
+        let lexer = Lexer::new(input);
+        let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
+        let (_, program) = parse_program(&tokens).unwrap();
+        let transpiler = Transpiler::new();
+        let (rust_code, _) = transpile_program(&transpiler, &program, input);
+        assert!(!rust_code.contains("#[allow(unreachable_patterns)]"));
+        assert!(!rust_code.contains("panic!(\"non-exhaustive match in Desert source\")"));
+        assert_eq!(rust_code.matches("_ => {").count(), 0);
+    }
+
+    #[test]
+    fn test_transpile_match_bool_arms_do_not_add_fallback() {
+        let input =
+            "def main():\n    let flag = true\n    match flag:\n        true:\n            $print(\"yes\")\n        false:\n            $print(\"no\")";
+        let lexer = Lexer::new(input);
+        let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
+        let (_, program) = parse_program(&tokens).unwrap();
+        let transpiler = Transpiler::new();
+        let (rust_code, _) = transpile_program(&transpiler, &program, input);
+        assert!(!rust_code.contains("#[allow(unreachable_patterns)]"));
+        assert!(!rust_code.contains("panic!(\"non-exhaustive match in Desert source\")"));
+        assert_eq!(rust_code.matches("_ => {").count(), 0);
+    }
+
+    #[test]
+    fn test_transpile_match_result_arms_do_not_add_fallback() {
+        let input =
+            "def main():\n    let result = Ok(1)\n    match result:\n        Ok(v):\n            $print(v)\n        Err(e):\n            $print(e)";
+        let lexer = Lexer::new(input);
+        let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
+        let (_, program) = parse_program(&tokens).unwrap();
+        let transpiler = Transpiler::new();
+        let (rust_code, _) = transpile_program(&transpiler, &program, input);
+        assert!(!rust_code.contains("#[allow(unreachable_patterns)]"));
+        assert!(!rust_code.contains("panic!(\"non-exhaustive match in Desert source\")"));
+        assert_eq!(rust_code.matches("_ => {").count(), 0);
     }
 }

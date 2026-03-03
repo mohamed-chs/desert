@@ -1,0 +1,21 @@
+def main():
+    let maybe = Some(3)
+    match maybe:
+        Some(v):
+            $print("some {v}")
+        None:
+            $print("none")
+
+    let outcome: Result[i32, String] = Ok(9)
+    match outcome:
+        Ok(v):
+            $print("ok {v}")
+        Err(e):
+            $print("err {e}")
+
+    let flag = true
+    match flag:
+        true:
+            $print("yes")
+        false:
+            $print("no")

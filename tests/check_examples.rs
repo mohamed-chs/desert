@@ -95,6 +95,11 @@ fn check_match_option_example() {
 }
 
 #[test]
+fn check_match_exhaustive_example() {
+    run_check("match_exhaustive.ds");
+}
+
+#[test]
 fn check_mutable_pipeline_example() {
     run_check("mutable_pipeline.ds");
 }
@@ -816,6 +821,14 @@ fn transpile_fixture_match_fallback_comprehensive_matches_expected() {
     assert_transpile_matches_fixture(
         "tests/fixtures/transpile_ok_match_fallback_comprehensive.ds",
         "tests/fixtures/transpile_ok_match_fallback_comprehensive.rs",
+    );
+}
+
+#[test]
+fn transpile_fixture_match_obvious_exhaustive_matches_expected() {
+    assert_transpile_matches_fixture(
+        "tests/fixtures/transpile_ok_match_obvious_exhaustive.ds",
+        "tests/fixtures/transpile_ok_match_obvious_exhaustive.rs",
     );
 }
 
