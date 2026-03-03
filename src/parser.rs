@@ -1,5 +1,5 @@
 use crate::ast::*;
-use crate::lexer::Token;
+use crate::lexer::{Lexer, Token};
 use nom::{
     IResult,
     error::{Error, ErrorKind},
@@ -821,6 +821,31 @@ pub fn parse_program(input: &[TokenSpan]) -> ParseResult<'_, Program> {
     Ok((current_input, Program { statements }))
 }
 
+pub fn parse_expression_text(source: &str) -> Result<Expression, String> {
+    let mut tokens = Vec::new();
+    for token in Lexer::new(source) {
+        match token {
+            Ok(token) => tokens.push(token),
+            Err(_) => return Err("failed to lex expression".to_string()),
+        }
+    }
+
+    if tokens.is_empty() {
+        return Err("empty expression".to_string());
+    }
+
+    match expression(&tokens) {
+        Ok((rest, expr)) => {
+            if rest.is_empty() {
+                Ok(expr)
+            } else {
+                Err(format!("unexpected trailing token: {:?}", rest[0].0))
+            }
+        }
+        Err(_) => Err("failed to parse expression".to_string()),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1176,5 +1201,11 @@ mut w = 10
             StatementKind::Let { name, .. } => assert_eq!(name, "ref"),
             _ => panic!("Expected Let statement"),
         }
+    }
+
+    #[test]
+    fn test_parse_expression_text_supports_move_index() {
+        let expr = parse_expression_text("move xs[0]").expect("expression should parse");
+        assert!(matches!(expr, Expression::Move(_)));
     }
 }

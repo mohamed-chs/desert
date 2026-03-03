@@ -1,5 +1,6 @@
 use crate::ast::*;
 use crate::imports::{rust_use_from_from_import, rust_use_from_import};
+use crate::parser::parse_expression_text;
 use crate::resolver::Resolver;
 use crate::sourcemap::{SourceLocation, SourceMap};
 use std::collections::HashMap;
@@ -683,7 +684,9 @@ impl Transpiler {
         let parts: Vec<String> = args
             .iter()
             .map(|arg| match arg {
-                Expression::Literal(Literal::String(s)) => self.transpile_print_string_literal(s),
+                Expression::Literal(Literal::String(s)) => {
+                    self.transpile_print_string_literal(s, struct_fields, resolver)
+                }
                 _ => format!(
                     "format!(\"{{:?}}\", {})",
                     self.transpile_expression(arg, struct_fields, resolver)
@@ -698,7 +701,12 @@ impl Transpiler {
         }
     }
 
-    fn transpile_print_string_literal(&self, value: &str) -> String {
+    fn transpile_print_string_literal(
+        &self,
+        value: &str,
+        struct_fields: &HashMap<String, Vec<String>>,
+        resolver: &Resolver,
+    ) -> String {
         let mut format_template = String::new();
         let mut interpolation_args = Vec::new();
         let mut idx = 0;
@@ -717,7 +725,9 @@ impl Transpiler {
                     format_template.push('}');
                 } else {
                     format_template.push_str("{:?}");
-                    interpolation_args.push(placeholder.to_string());
+                    interpolation_args.push(
+                        self.transpile_print_placeholder(placeholder, struct_fields, resolver),
+                    );
                 }
 
                 idx = close + 1;
@@ -740,6 +750,18 @@ impl Transpiler {
             format_template,
             interpolation_args.join(", ")
         )
+    }
+
+    fn transpile_print_placeholder(
+        &self,
+        placeholder: &str,
+        struct_fields: &HashMap<String, Vec<String>>,
+        resolver: &Resolver,
+    ) -> String {
+        match parse_expression_text(placeholder) {
+            Ok(expr) => self.transpile_expression(&expr, struct_fields, resolver),
+            Err(_) => placeholder.to_string(),
+        }
     }
 
     fn collect_struct_fields(&self, program: &Program) -> HashMap<String, Vec<String>> {
@@ -1117,6 +1139,18 @@ mod tests {
         let transpiler = Transpiler::new();
         let (rust_code, _) = transpile_program(&transpiler, &program, input);
         let expected = "fn main() {\n    println!(\"{}\", format!(\"port {:?}\", cfg.port));\n}\n";
+        assert_eq!(rust_code, expected);
+    }
+
+    #[test]
+    fn test_transpile_print_with_desert_interpolation_expression() {
+        let input = "def main():\n    mut xs = [1, 2, 3]\n    $print(\"head {move xs[0]} rest {xs}\")";
+        let lexer = Lexer::new(input);
+        let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
+        let (_, program) = parse_program(&tokens).unwrap();
+        let transpiler = Transpiler::new();
+        let (rust_code, _) = transpile_program(&transpiler, &program, input);
+        let expected = "fn main() {\n    let mut xs = vec![1, 2, 3];\n    println!(\"{}\", format!(\"head {:?} rest {:?}\", std::mem::take(&mut xs[0]), xs));\n}\n";
         assert_eq!(rust_code, expected);
     }
 
