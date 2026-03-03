@@ -93,6 +93,7 @@ Core quality checks currently pass:
 - Added Rust-import passthrough semantics: `import rust...`/`import "rust:..."` now emit Rust `use` statements, skip local `.ds` graph resolution, and predeclare imported leaf names for semantic identifier validation.
 - Added richer Rust import syntax with aliasing and grouped forms: `import rust.std.collections.HashMap as Map` and `from rust.std.cmp import max as maximum, min`.
 - Added semantic validation that `from ... import ...` rejects duplicate imported items and duplicate introduced local names in a single statement before Rust lowering.
+- Added semantic validation that non-Rust `from ... import ...` forms are unsupported (including fail-fast diagnostics), keeping local-module imports on plain `import` paths.
 
 ## Known Gaps
 

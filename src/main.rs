@@ -1302,31 +1302,32 @@ fn validate_statements(
                 }
                 if let StatementKind::FromImport { items, .. } = &stmt.kind {
                     validate_from_import_items(items, stmt.span.start)?;
-                }
-                if crate::imports::rust_use_from_import_path(path).is_none()
-                    && matches!(
-                        &stmt.kind,
-                        StatementKind::FromImport { items, .. }
-                            if items.iter().any(|item| item.alias.is_some())
-                    )
-                {
-                    return Err(SemanticError {
-                        offset: stmt.span.start,
-                        message:
-                            "aliasing non-rust from-import items is unsupported (remove `as ...`)"
+                    let rust_path = crate::imports::rust_use_from_import_path(path);
+                    if rust_path.is_none() {
+                        if items.iter().any(|item| item.alias.is_some()) {
+                            return Err(SemanticError {
+                                offset: stmt.span.start,
+                                message: "aliasing non-rust from-import items is unsupported (remove `as ...`)"
+                                    .to_string(),
+                            });
+                        }
+                        return Err(SemanticError {
+                            offset: stmt.span.start,
+                            message: "non-rust `from ... import ...` is unsupported (use plain `import \"path\"`)"
                                 .to_string(),
-                    });
-                }
-                if let Some(use_path) = crate::imports::rust_use_from_import_path(path)
-                    && !crate::imports::is_supported_rust_root(&use_path)
-                {
-                    return Err(SemanticError {
-                        offset: stmt.span.start,
-                        message: format!(
-                            "unsupported rust import root `{}` (only std/core/alloc are supported)",
-                            use_path.split("::").next().unwrap_or(&use_path)
-                        ),
-                    });
+                        });
+                    }
+                    if let Some(use_path) = rust_path
+                        && !crate::imports::is_supported_rust_root(&use_path)
+                    {
+                        return Err(SemanticError {
+                            offset: stmt.span.start,
+                            message: format!(
+                                "unsupported rust import root `{}` (only std/core/alloc are supported)",
+                                use_path.split("::").next().unwrap_or(&use_path)
+                            ),
+                        });
+                    }
                 }
             }
             StatementKind::Return(None) => {

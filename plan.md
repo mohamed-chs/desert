@@ -50,3 +50,4 @@ This roadmap follows current project direction: prioritize project workflow and 
 - Recent shipped behavior: `import rust...` / `import "rust:..."` now lowers to Rust `use ...;` statements (currently whitelisted to `std`/`core`/`alloc` roots), is ignored by local file-graph loading, and predeclares imported names for semantic identifier checks.
 - Recent shipped behavior: richer Rust import ergonomics now support aliases (`import rust.std.collections.HashMap as Map`) and grouped imports (`from rust.std.cmp import max as maximum, min`) with semantic predeclaration.
 - Recent shipped behavior: semantic validation now rejects duplicate `from ... import ...` items and duplicate introduced local names within a single import statement before Rust lowering.
+- Recent shipped behavior: semantic validation now rejects non-Rust `from ... import ...` statements (plain local-module `import` remains the supported form).

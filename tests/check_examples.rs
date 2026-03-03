@@ -363,6 +363,16 @@ fn check_rejects_aliasing_file_from_import_items() {
 }
 
 #[test]
+fn check_rejects_non_rust_from_import_items() {
+    let mut cmd = cargo_bin_cmd!("desert");
+    cmd.arg("check")
+        .arg("tests/fixtures/check_fail_file_from_import_unsupported.ds");
+    cmd.assert().failure().stderr(predicates::str::contains(
+        "Semantic error at line 3, column 1: non-rust `from ... import ...` is unsupported (use plain `import \"path\"`)",
+    ));
+}
+
+#[test]
 fn check_rejects_duplicate_from_import_items() {
     let mut cmd = cargo_bin_cmd!("desert");
     cmd.arg("check")
