@@ -1,0 +1,5 @@
+from "missing_dep.ds" import plus_one
+
+def main():
+    let v = plus_one(1)
+    $print(v)

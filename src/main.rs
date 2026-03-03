@@ -448,12 +448,9 @@ fn collect_file_sources(
                 let import_path = resolve_import_path(&canonical_file, path, None)?;
                 collect_file_sources(&import_path, visited, loading, ordered_files)?;
             }
-            crate::ast::StatementKind::FromImport { path, .. } => {
-                if crate::imports::rust_use_from_import_path(path).is_some() {
-                    continue;
-                }
-                let import_path = resolve_import_path(&canonical_file, path, None)?;
-                collect_file_sources(&import_path, visited, loading, ordered_files)?;
+            crate::ast::StatementKind::FromImport { .. } => {
+                // Non-rust from-import is currently unsupported and is validated
+                // semantically; keep graph loading aligned with that rule.
             }
             _ => {}
         }
@@ -507,12 +504,9 @@ fn collect_project_sources(
                 let import_path = resolve_import_path(&canonical_file, path, Some(project_root))?;
                 collect_project_sources(&import_path, project_root, visited, loading, ordered_files)?;
             }
-            crate::ast::StatementKind::FromImport { path, .. } => {
-                if crate::imports::rust_use_from_import_path(path).is_some() {
-                    continue;
-                }
-                let import_path = resolve_import_path(&canonical_file, path, Some(project_root))?;
-                collect_project_sources(&import_path, project_root, visited, loading, ordered_files)?;
+            crate::ast::StatementKind::FromImport { .. } => {
+                // Non-rust from-import is currently unsupported and is validated
+                // semantically; keep graph loading aligned with that rule.
             }
             _ => {}
         }

@@ -51,3 +51,4 @@ This roadmap follows current project direction: prioritize project workflow and 
 - Recent shipped behavior: richer Rust import ergonomics now support aliases (`import rust.std.collections.HashMap as Map`) and grouped imports (`from rust.std.cmp import max as maximum, min`) with semantic predeclaration.
 - Recent shipped behavior: semantic validation now rejects duplicate `from ... import ...` items and duplicate introduced local names within a single import statement before Rust lowering.
 - Recent shipped behavior: semantic validation now rejects non-Rust `from ... import ...` statements (plain local-module `import` remains the supported form).
+- Recent shipped behavior: file/project import-graph loading now ignores `from ... import ...` dependencies so unsupported non-Rust forms fail with the intended semantic diagnostic instead of early path-resolution errors.
