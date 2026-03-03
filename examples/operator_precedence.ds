@@ -1,0 +1,13 @@
+struct Counter:
+    value: i32
+
+def compute(a: i32, b: i32, c: i32) -> i32:
+    let weighted = a + b * c
+    let grouped = (a + b) * c
+    return weighted - grouped
+
+def main():
+    mut counter = Counter(value = 1)
+    counter.value = counter.value + 2 * 3
+    let delta = compute(2, 3, 4)
+    $print("counter {counter.value} delta {delta}")

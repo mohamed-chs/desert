@@ -12,13 +12,21 @@ fn run_check(example: &str) {
 
 fn run_transpile(input: &str) -> String {
     let mut cmd = cargo_bin_cmd!("desert");
-    let output = cmd.arg("transpile").arg(input).assert().success().get_output().stdout.clone();
+    let output = cmd
+        .arg("transpile")
+        .arg(input)
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
     String::from_utf8(output).expect("transpile output should be valid UTF-8")
 }
 
 fn assert_transpile_matches_fixture(input: &str, expected_output: &str) {
     let actual = run_transpile(input);
-    let expected = fs::read_to_string(expected_output).expect("expected fixture should be readable");
+    let expected =
+        fs::read_to_string(expected_output).expect("expected fixture should be readable");
     assert_eq!(actual, expected);
 }
 
@@ -105,6 +113,11 @@ fn check_struct_constructors_example() {
 #[test]
 fn check_transpile_showcase_example() {
     run_check("transpile_showcase.ds");
+}
+
+#[test]
+fn check_operator_precedence_example() {
+    run_check("operator_precedence.ds");
 }
 
 #[test]
@@ -734,6 +747,14 @@ fn transpile_fixture_comprehensive_flow_matches_expected() {
 }
 
 #[test]
+fn transpile_fixture_operator_precedence_matches_expected() {
+    assert_transpile_matches_fixture(
+        "tests/fixtures/transpile_ok_operator_precedence.ds",
+        "tests/fixtures/transpile_ok_operator_precedence.rs",
+    );
+}
+
+#[test]
 fn check_project_directory_reports_import_cycle() {
     let mut cmd = cargo_bin_cmd!("desert");
     cmd.arg("check").arg("tests/fixtures/project_import_cycle");
@@ -755,9 +776,9 @@ fn graph_project_directory_with_import_graph_order() {
 fn graph_project_directory_without_manifest_uses_fallback_entry() {
     let mut cmd = cargo_bin_cmd!("desert");
     cmd.arg("graph").arg("tests/fixtures/project_no_manifest");
-    cmd.assert().success().stdout(predicates::str::contains(
-        "src/util/math.ds\nsrc/main.ds\n",
-    ));
+    cmd.assert()
+        .success()
+        .stdout(predicates::str::contains("src/util/math.ds\nsrc/main.ds\n"));
 }
 
 #[test]
@@ -801,7 +822,9 @@ fn run_project_executes_program() {
 fn run_project_directory_without_manifest_uses_fallback_entry() {
     let mut cmd = cargo_bin_cmd!("desert");
     cmd.arg("run").arg("tests/fixtures/project_no_manifest");
-    cmd.assert().success().stdout(predicates::str::contains("7"));
+    cmd.assert()
+        .success()
+        .stdout(predicates::str::contains("7"));
 }
 
 #[test]

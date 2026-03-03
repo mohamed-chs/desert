@@ -573,12 +573,17 @@ impl Transpiler {
                     BinaryOp::Le => "<=",
                     BinaryOp::MatMul => unreachable!("handled above"),
                 };
-                format!(
-                    "({} {} {})",
-                    self.transpile_expression(left, struct_fields, resolver),
-                    op_str,
-                    self.transpile_expression(right, struct_fields, resolver)
-                )
+                let mut left_str = self.transpile_expression(left, struct_fields, resolver);
+                if self.binary_child_needs_parentheses(left, op, true) {
+                    left_str = format!("({left_str})");
+                }
+
+                let mut right_str = self.transpile_expression(right, struct_fields, resolver);
+                if self.binary_child_needs_parentheses(right, op, false) {
+                    right_str = format!("({right_str})");
+                }
+
+                format!("{left_str} {op_str} {right_str}")
             }
             Expression::Call(callee, args) => {
                 if let Expression::Ident(name) = callee.as_ref()
@@ -671,6 +676,47 @@ impl Transpiler {
         }
     }
 
+    fn binary_precedence(&self, op: &BinaryOp) -> u8 {
+        match op {
+            BinaryOp::Assign => 1,
+            BinaryOp::Eq
+            | BinaryOp::Ne
+            | BinaryOp::Gt
+            | BinaryOp::Lt
+            | BinaryOp::Ge
+            | BinaryOp::Le => 2,
+            BinaryOp::Add | BinaryOp::Sub => 3,
+            BinaryOp::Mul | BinaryOp::Div | BinaryOp::MatMul => 4,
+        }
+    }
+
+    fn binary_child_needs_parentheses(
+        &self,
+        child: &Expression,
+        parent_op: &BinaryOp,
+        is_left_child: bool,
+    ) -> bool {
+        let Expression::BinaryOp(_, child_op, _) = child else {
+            return false;
+        };
+
+        let child_prec = self.binary_precedence(child_op);
+        let parent_prec = self.binary_precedence(parent_op);
+
+        if child_prec < parent_prec {
+            return true;
+        }
+        if child_prec > parent_prec {
+            return false;
+        }
+
+        if matches!(parent_op, BinaryOp::Assign) {
+            return is_left_child;
+        }
+
+        !is_left_child
+    }
+
     fn transpile_print_macro(
         &self,
         args: &[Expression],
@@ -725,9 +771,11 @@ impl Transpiler {
                     format_template.push('}');
                 } else {
                     format_template.push_str("{:?}");
-                    interpolation_args.push(
-                        self.transpile_print_placeholder(placeholder, struct_fields, resolver),
-                    );
+                    interpolation_args.push(self.transpile_print_placeholder(
+                        placeholder,
+                        struct_fields,
+                        resolver,
+                    ));
                 }
 
                 idx = close + 1;
@@ -1088,7 +1136,7 @@ mod tests {
 
         let (rust_code, _) = transpile_program(&transpiler, &program, input.trim());
 
-        let expected = "fn factorial(n) -> impl std::fmt::Debug {\n    if (n == 0) {\n        return 1;\n    }\n    return (n * factorial((n - 1)));\n}\n";
+        let expected = "fn factorial(n) -> impl std::fmt::Debug {\n    if n == 0 {\n        return 1;\n    }\n    return n * factorial(n - 1);\n}\n";
 
         assert_eq!(rust_code, expected);
     }
@@ -1144,7 +1192,8 @@ mod tests {
 
     #[test]
     fn test_transpile_print_with_desert_interpolation_expression() {
-        let input = "def main():\n    mut xs = [1, 2, 3]\n    $print(\"head {move xs[0]} rest {xs}\")";
+        let input =
+            "def main():\n    mut xs = [1, 2, 3]\n    $print(\"head {move xs[0]} rest {xs}\")";
         let lexer = Lexer::new(input);
         let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
         let (_, program) = parse_program(&tokens).unwrap();
@@ -1285,7 +1334,7 @@ mod tests {
 
         assert_eq!(
             rust_code,
-            "struct Path {\n    pub raw: String,\n}\nif (1 == 1) {\n    let Path = 1;\n}\nlet y = Path::new();\n"
+            "struct Path {\n    pub raw: String,\n}\nif 1 == 1 {\n    let Path = 1;\n}\nlet y = Path::new();\n"
         );
     }
 
@@ -1308,7 +1357,7 @@ mod tests {
         let (_, program) = parse_program(&tokens).unwrap();
         let transpiler = Transpiler::new();
         let (rust_code, _) = transpile_program(&transpiler, &program, input);
-        let expected = "if (x > 0) {\n    return 1;\n} else {\n    return 0;\n}\n";
+        let expected = "if x > 0 {\n    return 1;\n} else {\n    return 0;\n}\n";
         assert_eq!(rust_code, expected);
     }
 
@@ -1381,7 +1430,20 @@ mod tests {
         let (_, program) = parse_program(&tokens).unwrap();
         let transpiler = Transpiler::new();
         let (rust_code, _) = transpile_program(&transpiler, &program, input);
-        let expected = "impl Counter {\n    fn inc(&mut self) {\n        (self.value = (self.value + 1));\n    }\n}\n";
+        let expected = "impl Counter {\n    fn inc(&mut self) {\n        self.value = self.value + 1;\n    }\n}\n";
+        assert_eq!(rust_code, expected);
+    }
+
+    #[test]
+    fn test_transpile_binary_precedence_preserves_structure() {
+        let input =
+            "def main():\n    let x = a + b * c\n    let y = (a + b) * c\n    z = a - (b - c)";
+        let lexer = Lexer::new(input);
+        let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
+        let (_, program) = parse_program(&tokens).unwrap();
+        let transpiler = Transpiler::new();
+        let (rust_code, _) = transpile_program(&transpiler, &program, input);
+        let expected = "fn main() {\n    let x = a + b * c;\n    let y = (a + b) * c;\n    z = a - (b - c);\n}\n";
         assert_eq!(rust_code, expected);
     }
 
