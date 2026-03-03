@@ -1,0 +1,5 @@
+from rust.std.cmp import max, max
+
+def main():
+    let v = max(1, 2)
+    $print(v)

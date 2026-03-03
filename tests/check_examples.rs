@@ -363,6 +363,16 @@ fn check_rejects_aliasing_file_from_import_items() {
 }
 
 #[test]
+fn check_rejects_duplicate_from_import_items() {
+    let mut cmd = cargo_bin_cmd!("desert");
+    cmd.arg("check")
+        .arg("tests/fixtures/check_fail_from_import_duplicate_items.ds");
+    cmd.assert().failure().stderr(predicates::str::contains(
+        "Semantic error at line 1, column 1: duplicate from-import item `max`",
+    ));
+}
+
+#[test]
 fn check_reports_return_outside_def() {
     let mut cmd = cargo_bin_cmd!("desert");
     cmd.arg("check")

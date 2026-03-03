@@ -1300,6 +1300,9 @@ fn validate_statements(
                         message: "`from ... import ...` is only allowed at top level".to_string(),
                     });
                 }
+                if let StatementKind::FromImport { items, .. } = &stmt.kind {
+                    validate_from_import_items(items, stmt.span.start)?;
+                }
                 if crate::imports::rust_use_from_import_path(path).is_none()
                     && matches!(
                         &stmt.kind,
@@ -1632,6 +1635,7 @@ fn predeclare_block_symbols(
                 );
             }
             crate::ast::StatementKind::FromImport { path, items } => {
+                validate_from_import_items(items, stmt.span.start)?;
                 if crate::imports::rust_use_from_import_path(path).is_none() {
                     continue;
                 }
@@ -1704,6 +1708,34 @@ fn validate_method_name_uniqueness(
                     message: format!("duplicate method `{}` in {}", name, owner_label),
                 });
             }
+        }
+    }
+    Ok(())
+}
+
+fn validate_from_import_items(
+    items: &[crate::ast::ImportItem],
+    offset: usize,
+) -> Result<(), SemanticError> {
+    let mut seen_items = HashSet::new();
+    let mut seen_bindings = HashSet::new();
+    for item in items {
+        if !seen_items.insert(item.name.as_str()) {
+            return Err(SemanticError {
+                offset,
+                message: format!("duplicate from-import item `{}`", item.name),
+            });
+        }
+
+        let binding_name = item.alias.as_deref().unwrap_or(&item.name);
+        if !seen_bindings.insert(binding_name) {
+            return Err(SemanticError {
+                offset,
+                message: format!(
+                    "from-import introduces duplicate local name `{}` in one statement",
+                    binding_name
+                ),
+            });
         }
     }
     Ok(())
