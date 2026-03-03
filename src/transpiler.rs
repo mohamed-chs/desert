@@ -458,6 +458,17 @@ impl Transpiler {
                 }
                 StatementKind::Import { .. } | StatementKind::FromImport { .. } => {}
                 StatementKind::Match { expression, arms } => {
+                    let needs_fallback = !Self::match_has_wildcard_arm(arms);
+                    if needs_fallback {
+                        let attr = format!("{}#[allow(unreachable_patterns)]\n", "    ".repeat(indent));
+                        output.push_str(&attr);
+                        source_map.add_mapping_with_rust_column(
+                            *current_line,
+                            stmt_location.clone(),
+                            rust_line_start_column(&attr),
+                        );
+                        *current_line += 1;
+                    }
                     let header = format!(
                         "{}match {} {{\n",
                         "    ".repeat(indent),
@@ -506,6 +517,37 @@ impl Transpiler {
                             *current_line,
                             stmt_location.clone(),
                             rust_line_start_column(&arm_footer),
+                        );
+                        *current_line += 1;
+                    }
+                    if needs_fallback {
+                        let fallback_header = format!("{}    _ => {{\n", "    ".repeat(indent));
+                        output.push_str(&fallback_header);
+                        source_map.add_mapping_with_rust_column(
+                            *current_line,
+                            stmt_location.clone(),
+                            rust_line_start_column(&fallback_header),
+                        );
+                        *current_line += 1;
+
+                        let fallback_body = format!(
+                            "{}        panic!(\"non-exhaustive match in Desert source\");\n",
+                            "    ".repeat(indent)
+                        );
+                        output.push_str(&fallback_body);
+                        source_map.add_mapping_with_rust_column(
+                            *current_line,
+                            stmt_location.clone(),
+                            rust_line_start_column(&fallback_body),
+                        );
+                        *current_line += 1;
+
+                        let fallback_footer = format!("{}    }}\n", "    ".repeat(indent));
+                        output.push_str(&fallback_footer);
+                        source_map.add_mapping_with_rust_column(
+                            *current_line,
+                            stmt_location.clone(),
+                            rust_line_start_column(&fallback_footer),
                         );
                         *current_line += 1;
                     }
@@ -589,11 +631,16 @@ impl Transpiler {
             }
             StatementKind::Import { .. } | StatementKind::FromImport { .. } => String::new(),
             StatementKind::Match { expression, arms } => {
-                let mut output = format!(
+                let needs_fallback = !Self::match_has_wildcard_arm(arms);
+                let mut output = String::new();
+                if needs_fallback {
+                    output.push_str(&format!("{}#[allow(unreachable_patterns)]\n", indent_str));
+                }
+                output.push_str(&format!(
                     "{}match {} {{\n",
                     indent_str,
                     self.transpile_expression(expression, struct_fields, resolver)
-                );
+                ));
                 for (pattern, body) in arms {
                     output.push_str(&format!(
                         "{}    {} => {{\n",
@@ -608,6 +655,14 @@ impl Transpiler {
                             resolver,
                         ));
                     }
+                    output.push_str(&format!("{}    }}\n", indent_str));
+                }
+                if needs_fallback {
+                    output.push_str(&format!("{}    _ => {{\n", indent_str));
+                    output.push_str(&format!(
+                        "{}        panic!(\"non-exhaustive match in Desert source\");\n",
+                        indent_str
+                    ));
                     output.push_str(&format!("{}    }}\n", indent_str));
                 }
                 output.push_str(&format!("{}}}\n", indent_str));
@@ -1155,6 +1210,12 @@ impl Transpiler {
             Expression::Literal(_) | Expression::Ident(_) => false,
         }
     }
+
+    fn match_has_wildcard_arm(arms: &[(Expression, Vec<Statement>)]) -> bool {
+        arms.iter().any(|(pattern, _)| {
+            matches!(pattern, Expression::Ident(name) if name == "_")
+        })
+    }
 }
 
 impl Default for Transpiler {
@@ -1625,5 +1686,28 @@ mod tests {
         let transpiler = Transpiler::new();
         let (rust_code, _) = transpile_program(&transpiler, &program, input);
         assert!(rust_code.contains("obj.method::<T1, T2>(arg1, arg2)"));
+    }
+
+    #[test]
+    fn test_transpile_match_adds_fallback_when_wildcard_missing() {
+        let input = "def main():\n    let x = 1\n    match x:\n        1:\n            $print(\"one\")";
+        let lexer = Lexer::new(input);
+        let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
+        let (_, program) = parse_program(&tokens).unwrap();
+        let transpiler = Transpiler::new();
+        let (rust_code, _) = transpile_program(&transpiler, &program, input);
+        assert!(rust_code.contains("_ => {"));
+        assert!(rust_code.contains("panic!(\"non-exhaustive match in Desert source\")"));
+    }
+
+    #[test]
+    fn test_transpile_match_keeps_single_wildcard_arm() {
+        let input = "def main():\n    let x = 1\n    match x:\n        1:\n            $print(\"one\")\n        _:\n            $print(\"other\")";
+        let lexer = Lexer::new(input);
+        let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
+        let (_, program) = parse_program(&tokens).unwrap();
+        let transpiler = Transpiler::new();
+        let (rust_code, _) = transpile_program(&transpiler, &program, input);
+        assert_eq!(rust_code.matches("_ => {").count(), 1);
     }
 }

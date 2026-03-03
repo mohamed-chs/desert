@@ -1,0 +1,35 @@
+from rust.std.cmp import max as std_max
+
+protocol Stats:
+    def bump(mut self, delta: i32) -> i32:
+        return 0
+
+struct Counter:
+    value: i32
+
+impl Stats for Counter:
+    def bump(mut self, delta: i32) -> i32:
+        self.value = self.value + delta
+        return self.value
+
+def dot_sum(xs: List[f32], ys: List[f32]) -> f32:
+    let out = xs @ ys
+    return out[0]
+
+def consume_head(items: ~List[i32]) -> i32:
+    return move items[0]
+
+def main():
+    mut counter = Counter(2)
+    let bumped = counter.bump(std_max(3, 4))
+
+    mut data = [9, 8, 7]
+    let head = consume_head(~data)
+
+    let score = dot_sum([1.0, 2.0], [3.0, 4.0])
+
+    match head:
+        9:
+            $print("head {head} bumped {bumped} score {score}")
+        0:
+            $print("zero")

@@ -121,6 +121,11 @@ fn check_operator_precedence_example() {
 }
 
 #[test]
+fn check_comprehensive_match_pipeline_example() {
+    run_check("comprehensive_match_pipeline.ds");
+}
+
+#[test]
 fn check_reports_translated_diagnostics_for_type_mismatch_fixture() {
     let mut cmd = cargo_bin_cmd!("desert");
     cmd.arg("check")
@@ -751,6 +756,14 @@ fn transpile_fixture_operator_precedence_matches_expected() {
     assert_transpile_matches_fixture(
         "tests/fixtures/transpile_ok_operator_precedence.ds",
         "tests/fixtures/transpile_ok_operator_precedence.rs",
+    );
+}
+
+#[test]
+fn transpile_fixture_match_fallback_comprehensive_matches_expected() {
+    assert_transpile_matches_fixture(
+        "tests/fixtures/transpile_ok_match_fallback_comprehensive.ds",
+        "tests/fixtures/transpile_ok_match_fallback_comprehensive.rs",
     );
 }
 

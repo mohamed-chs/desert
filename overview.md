@@ -41,6 +41,7 @@ The design priority is explicit semantics with predictable lowering. Syntax that
   - Unresolved identifiers now fail during semantic validation (`unknown identifier ...`) instead of deferring to rustc, while preserving built-in enum/bool value symbols and declared type receivers
 - Match arm patterns:
   - Pattern binders (for example `Some(node)`) are introduced into the corresponding arm scope before body validation
+  - `match` lowering emits an explicit fallback `_` arm that panics when no wildcard arm is provided, avoiding Rust non-exhaustive compile failures
 - `impl`/`protocol` method declarations:
   - Duplicate method names within the same `impl` or `protocol` block are rejected during semantic validation
   - `impl` and `protocol` bodies only allow `def` declarations
