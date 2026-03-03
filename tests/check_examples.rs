@@ -10,6 +10,18 @@ fn run_check(example: &str) {
     cmd.assert().success();
 }
 
+fn run_transpile(input: &str) -> String {
+    let mut cmd = cargo_bin_cmd!("desert");
+    let output = cmd.arg("transpile").arg(input).assert().success().get_output().stdout.clone();
+    String::from_utf8(output).expect("transpile output should be valid UTF-8")
+}
+
+fn assert_transpile_matches_fixture(input: &str, expected_output: &str) {
+    let actual = run_transpile(input);
+    let expected = fs::read_to_string(expected_output).expect("expected fixture should be readable");
+    assert_eq!(actual, expected);
+}
+
 #[test]
 fn check_hello_world_example() {
     run_check("hello_world.ds");
@@ -88,6 +100,11 @@ fn check_shape_protocol_example() {
 #[test]
 fn check_struct_constructors_example() {
     run_check("struct_constructors.ds");
+}
+
+#[test]
+fn check_transpile_showcase_example() {
+    run_check("transpile_showcase.ds");
 }
 
 #[test]
@@ -698,6 +715,22 @@ fn transpile_project_directory_with_import_graph() {
         .stdout(predicates::str::contains("fn plus("))
         .stdout(predicates::str::contains("fn add("))
         .stdout(predicates::str::contains("fn main("));
+}
+
+#[test]
+fn transpile_fixture_print_interpolation_desert_expression_matches_expected() {
+    assert_transpile_matches_fixture(
+        "tests/fixtures/transpile_ok_print_interpolation_expr.ds",
+        "tests/fixtures/transpile_ok_print_interpolation_expr.rs",
+    );
+}
+
+#[test]
+fn transpile_fixture_comprehensive_flow_matches_expected() {
+    assert_transpile_matches_fixture(
+        "tests/fixtures/transpile_ok_comprehensive_flow.ds",
+        "tests/fixtures/transpile_ok_comprehensive_flow.rs",
+    );
 }
 
 #[test]

@@ -1,0 +1,15 @@
+from rust.std.cmp import max as std_max
+
+struct Pair:
+    left: i32
+    right: i32
+
+def swap(pair: Pair) -> Pair:
+    return Pair(pair.right, pair.left)
+
+def main():
+    mut values = [3, 9, 1]
+    let taken = move values[1]
+    let pair = Pair(left = taken, right = std_max(values[0], values[2]))
+    let swapped = swap(pair)
+    $print("swap {swapped.left} {swapped.right} values {values}")
