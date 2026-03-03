@@ -18,6 +18,12 @@ pub struct DiagnosticSpan {
     pub line_start: usize,
     pub line_end: usize,
     pub file_name: String,
+    #[serde(default = "default_column_start")]
+    pub column_start: usize,
+}
+
+fn default_column_start() -> usize {
+    1
 }
 
 #[derive(Deserialize, Debug)]
@@ -45,7 +51,7 @@ impl Mirage {
         for span in &msg.spans {
             // rustc lines are 1-based. SourceMap uses 0-based.
             let rs_line = span.line_start.saturating_sub(1);
-            if let Some(ds_loc) = source_map.get_location(rs_line) {
+            if let Some(ds_loc) = source_map.get_location_for_span(rs_line, span.column_start) {
                 if !seen.insert((ds_loc.file.clone(), ds_loc.line, ds_loc.column)) {
                     continue;
                 }
@@ -83,11 +89,12 @@ mod tests {
     use super::{Diagnostic, DiagnosticCode, DiagnosticSpan, Mirage};
     use crate::sourcemap::{SourceLocation, SourceMap};
 
-    fn span(rs_line_1_based: usize) -> DiagnosticSpan {
+    fn span(rs_line_1_based: usize, rs_column_1_based: usize) -> DiagnosticSpan {
         DiagnosticSpan {
             line_start: rs_line_1_based,
             line_end: rs_line_1_based,
             file_name: "main.rs".to_string(),
+            column_start: rs_column_1_based,
         }
     }
 
@@ -107,7 +114,7 @@ mod tests {
             code: Some(DiagnosticCode {
                 code: "E0596".to_string(),
             }),
-            spans: vec![span(3)],
+            spans: vec![span(3, 1)],
         };
 
         let translated = Mirage::translate_error(&msg, &source_map);
@@ -134,5 +141,27 @@ mod tests {
                 "Hint: Call a method that exists for this type, or implement a matching `protocol`/`impl`."
             )
         );
+    }
+
+    #[test]
+    fn translate_error_offsets_desert_column_using_rust_span_column() {
+        let mut source_map = SourceMap::new();
+        source_map.add_mapping_with_rust_column(
+            1,
+            SourceLocation {
+                file: "sample.ds".to_string(),
+                line: 3,
+                column: 5,
+            },
+            5,
+        );
+        let msg = Diagnostic {
+            message: "cannot find value `missing` in this scope".to_string(),
+            code: None,
+            spans: vec![span(2, 11)],
+        };
+
+        let translated = Mirage::translate_error(&msg, &source_map);
+        assert!(translated.contains("sample.ds:3:11: in Desert source"));
     }
 }

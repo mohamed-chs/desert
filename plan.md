@@ -52,3 +52,4 @@ This roadmap follows current project direction: prioritize project workflow and 
 - Recent shipped behavior: semantic validation now rejects duplicate `from ... import ...` items and duplicate introduced local names within a single import statement before Rust lowering.
 - Recent shipped behavior: semantic validation now rejects non-Rust `from ... import ...` statements (plain local-module `import` remains the supported form).
 - Recent shipped behavior: file/project import-graph loading now ignores `from ... import ...` dependencies so unsupported non-Rust forms fail with the intended semantic diagnostic instead of early path-resolution errors.
+- Recent shipped behavior: rustc-backed diagnostics now map Desert columns using span-column offsets per generated Rust line (instead of always reporting statement-start columns).

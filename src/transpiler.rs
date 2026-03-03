@@ -27,6 +27,12 @@ fn line_col_from_offset(source: &str, offset: usize) -> (usize, usize) {
     (line, col)
 }
 
+fn rust_line_start_column(line: &str) -> usize {
+    line.chars()
+        .position(|ch| !ch.is_whitespace())
+        .map_or(1, |idx| idx + 1)
+}
+
 fn statement_location(
     source: &str,
     stmt: &Statement,
@@ -165,7 +171,11 @@ impl Transpiler {
                         ret_str
                     );
                     output.push_str(&header);
-                    source_map.add_mapping(*current_line, stmt_location.clone());
+                    source_map.add_mapping_with_rust_column(
+                        *current_line,
+                        stmt_location.clone(),
+                        rust_line_start_column(&header),
+                    );
                     *current_line += 1;
 
                     resolver.declare_value(name);
@@ -189,7 +199,11 @@ impl Transpiler {
 
                     let footer = format!("{}}}\n", indent_str);
                     output.push_str(&footer);
-                    source_map.add_mapping(*current_line, stmt_location.clone());
+                    source_map.add_mapping_with_rust_column(
+                        *current_line,
+                        stmt_location.clone(),
+                        rust_line_start_column(&footer),
+                    );
                     *current_line += 1;
                 }
                 StatementKind::If {
@@ -204,7 +218,11 @@ impl Transpiler {
                         self.transpile_expression(condition, struct_fields, resolver)
                     );
                     output.push_str(&header);
-                    source_map.add_mapping(*current_line, stmt_location.clone());
+                    source_map.add_mapping_with_rust_column(
+                        *current_line,
+                        stmt_location.clone(),
+                        rust_line_start_column(&header),
+                    );
                     *current_line += 1;
 
                     resolver.enter_scope();
@@ -225,7 +243,11 @@ impl Transpiler {
                     if let Some(else_b) = else_block {
                         let mid = format!("{}}} else {{\n", indent_str);
                         output.push_str(&mid);
-                        source_map.add_mapping(*current_line, stmt_location.clone());
+                        source_map.add_mapping_with_rust_column(
+                            *current_line,
+                            stmt_location.clone(),
+                            rust_line_start_column(&mid),
+                        );
                         *current_line += 1;
                         resolver.enter_scope();
                         self.transpile_statements(
@@ -245,7 +267,11 @@ impl Transpiler {
 
                     let footer = format!("{}}}\n", indent_str);
                     output.push_str(&footer);
-                    source_map.add_mapping(*current_line, stmt_location.clone());
+                    source_map.add_mapping_with_rust_column(
+                        *current_line,
+                        stmt_location.clone(),
+                        rust_line_start_column(&footer),
+                    );
                     *current_line += 1;
                 }
                 StatementKind::For {
@@ -261,7 +287,11 @@ impl Transpiler {
                         self.transpile_expression(iterable, struct_fields, resolver)
                     );
                     output.push_str(&header);
-                    source_map.add_mapping(*current_line, stmt_location.clone());
+                    source_map.add_mapping_with_rust_column(
+                        *current_line,
+                        stmt_location.clone(),
+                        rust_line_start_column(&header),
+                    );
                     *current_line += 1;
 
                     resolver.enter_scope();
@@ -282,14 +312,22 @@ impl Transpiler {
 
                     let footer = format!("{}}}\n", indent_str);
                     output.push_str(&footer);
-                    source_map.add_mapping(*current_line, stmt_location.clone());
+                    source_map.add_mapping_with_rust_column(
+                        *current_line,
+                        stmt_location.clone(),
+                        rust_line_start_column(&footer),
+                    );
                     *current_line += 1;
                 }
                 StatementKind::Struct { name, fields } => {
                     let indent_str = "    ".repeat(indent);
                     let header = format!("{}struct {} {{\n", indent_str, name);
                     output.push_str(&header);
-                    source_map.add_mapping(*current_line, stmt_location.clone());
+                    source_map.add_mapping_with_rust_column(
+                        *current_line,
+                        stmt_location.clone(),
+                        rust_line_start_column(&header),
+                    );
                     *current_line += 1;
 
                     for field in fields {
@@ -302,20 +340,32 @@ impl Transpiler {
                             "{}    pub {}: {},\n",
                             indent_str, field.name, f_ty
                         ));
-                        source_map.add_mapping(*current_line, stmt_location.clone());
+                        source_map.add_mapping_with_rust_column(
+                            *current_line,
+                            stmt_location.clone(),
+                            indent_str.len() + 5,
+                        );
                         *current_line += 1;
                     }
 
                     let footer = format!("{}}}\n", indent_str);
                     output.push_str(&footer);
-                    source_map.add_mapping(*current_line, stmt_location.clone());
+                    source_map.add_mapping_with_rust_column(
+                        *current_line,
+                        stmt_location.clone(),
+                        rust_line_start_column(&footer),
+                    );
                     *current_line += 1;
                 }
                 StatementKind::Protocol { name, methods } => {
                     let indent_str = "    ".repeat(indent);
                     let header = format!("{}trait {} {{\n", indent_str, name);
                     output.push_str(&header);
-                    source_map.add_mapping(*current_line, stmt_location.clone());
+                    source_map.add_mapping_with_rust_column(
+                        *current_line,
+                        stmt_location.clone(),
+                        rust_line_start_column(&header),
+                    );
                     *current_line += 1;
 
                     self.transpile_statements(
@@ -333,7 +383,11 @@ impl Transpiler {
 
                     let footer = format!("{}}}\n", indent_str);
                     output.push_str(&footer);
-                    source_map.add_mapping(*current_line, stmt_location.clone());
+                    source_map.add_mapping_with_rust_column(
+                        *current_line,
+                        stmt_location.clone(),
+                        rust_line_start_column(&footer),
+                    );
                     *current_line += 1;
                 }
                 StatementKind::Impl {
@@ -348,7 +402,11 @@ impl Transpiler {
                         format!("{}impl {} {{\n", indent_str, for_type)
                     };
                     output.push_str(&header);
-                    source_map.add_mapping(*current_line, stmt_location.clone());
+                    source_map.add_mapping_with_rust_column(
+                        *current_line,
+                        stmt_location.clone(),
+                        rust_line_start_column(&header),
+                    );
                     *current_line += 1;
 
                     self.transpile_statements(
@@ -366,15 +424,36 @@ impl Transpiler {
 
                     let footer = format!("{}}}\n", indent_str);
                     output.push_str(&footer);
-                    source_map.add_mapping(*current_line, stmt_location.clone());
+                    source_map.add_mapping_with_rust_column(
+                        *current_line,
+                        stmt_location.clone(),
+                        rust_line_start_column(&footer),
+                    );
                     *current_line += 1;
                 }
                 StatementKind::PyImport(content) => {
                     let indent_str = "    ".repeat(indent);
-                    output.push_str(&format!("{}/* Desert PyImport block:\n", indent_str));
-                    output.push_str(&format!("{}   {}\n", indent_str, content));
-                    output.push_str(&format!("{}*/\n", indent_str));
-                    source_map.add_mapping(*current_line, stmt_location.clone());
+                    let header = format!("{}/* Desert PyImport block:\n", indent_str);
+                    let body = format!("{}   {}\n", indent_str, content);
+                    let footer = format!("{}*/\n", indent_str);
+                    output.push_str(&header);
+                    output.push_str(&body);
+                    output.push_str(&footer);
+                    source_map.add_mapping_with_rust_column(
+                        *current_line,
+                        stmt_location.clone(),
+                        rust_line_start_column(&header),
+                    );
+                    source_map.add_mapping_with_rust_column(
+                        *current_line + 1,
+                        stmt_location.clone(),
+                        rust_line_start_column(&body),
+                    );
+                    source_map.add_mapping_with_rust_column(
+                        *current_line + 2,
+                        stmt_location.clone(),
+                        rust_line_start_column(&footer),
+                    );
                     *current_line += 3;
                 }
                 StatementKind::Import { .. } | StatementKind::FromImport { .. } => {}
@@ -385,7 +464,11 @@ impl Transpiler {
                         self.transpile_expression(expression, struct_fields, resolver)
                     );
                     output.push_str(&header);
-                    source_map.add_mapping(*current_line, stmt_location.clone());
+                    source_map.add_mapping_with_rust_column(
+                        *current_line,
+                        stmt_location.clone(),
+                        rust_line_start_column(&header),
+                    );
                     *current_line += 1;
 
                     for (pattern, body) in arms {
@@ -395,7 +478,11 @@ impl Transpiler {
                             self.transpile_expression(pattern, struct_fields, resolver)
                         );
                         output.push_str(&arm_header);
-                        source_map.add_mapping(*current_line, stmt_location.clone());
+                        source_map.add_mapping_with_rust_column(
+                            *current_line,
+                            stmt_location.clone(),
+                            rust_line_start_column(&arm_header),
+                        );
                         *current_line += 1;
 
                         resolver.enter_scope();
@@ -415,20 +502,32 @@ impl Transpiler {
 
                         let arm_footer = format!("{}    }}\n", "    ".repeat(indent));
                         output.push_str(&arm_footer);
-                        source_map.add_mapping(*current_line, stmt_location.clone());
+                        source_map.add_mapping_with_rust_column(
+                            *current_line,
+                            stmt_location.clone(),
+                            rust_line_start_column(&arm_footer),
+                        );
                         *current_line += 1;
                     }
 
                     let footer = format!("{}}}\n", "    ".repeat(indent));
                     output.push_str(&footer);
-                    source_map.add_mapping(*current_line, stmt_location.clone());
+                    source_map.add_mapping_with_rust_column(
+                        *current_line,
+                        stmt_location.clone(),
+                        rust_line_start_column(&footer),
+                    );
                     *current_line += 1;
                 }
                 _ => {
                     let stmt_output =
                         self.transpile_statement(stmt, indent, struct_fields, resolver);
-                    for _ in stmt_output.lines() {
-                        source_map.add_mapping(*current_line, stmt_location.clone());
+                    for rust_line in stmt_output.lines() {
+                        source_map.add_mapping_with_rust_column(
+                            *current_line,
+                            stmt_location.clone(),
+                            rust_line_start_column(rust_line),
+                        );
                         *current_line += 1;
                     }
                     output.push_str(&stmt_output);

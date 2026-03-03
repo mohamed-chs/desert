@@ -76,7 +76,7 @@ Project mode resolves top-level `import` statements recursively, loads imported 
 
 ## Current Limits
 
-- Rust diagnostics are mapped at file+line+statement-start-column granularity; token-accurate column mapping is not yet implemented.
+- Rust diagnostics now use rustc span columns to map Desert file+line+column locations; mappings can still be approximate when lowering rewrites expressions significantly.
 - Resolver is scoped symbol tracking, not full type inference.
 - `pyimport` is preserved as Rust comments.
 - `@` lowering is currently specialized to float vector/matrix helpers.

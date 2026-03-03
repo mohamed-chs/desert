@@ -95,12 +95,13 @@ Core quality checks currently pass:
 - Added semantic validation that `from ... import ...` rejects duplicate imported items and duplicate introduced local names in a single statement before Rust lowering.
 - Added semantic validation that non-Rust `from ... import ...` forms are unsupported (including fail-fast diagnostics), keeping local-module imports on plain `import` paths.
 - Aligned file/project graph loading with `from ... import ...` semantics by skipping from-import dependency traversal, so unsupported non-Rust from-imports report semantic errors instead of import-resolution failures.
+- Improved rustc diagnostic translation to use Rust span columns when mapping back to Desert source, yielding more precise Desert column reporting than statement-start-only mapping.
 
 ## Known Gaps
 
 - No project-level dependency management yet.
 - No package/dependency management yet beyond local file imports.
-- Rust diagnostics now map to file+line+statement-start column; full token/span-accurate column mapping is still pending.
+- Rust diagnostics now map to file+line+column using rustc span columns; mappings can still be approximate when lowering rewrites expressions heavily.
 - Resolver is heuristic, not semantic.
 - Mirage translations are simple string rewrites.
 - Matmul lowering currently targets specific float vector/matrix shapes.
