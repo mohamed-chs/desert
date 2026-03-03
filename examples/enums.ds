@@ -1,0 +1,41 @@
+enum Direction:
+    North
+    South
+    East
+    West
+
+enum Shape:
+    Circle(f64)
+    Rectangle(f64, f64)
+    Triangle(f64, f64, f64)
+
+def describe_direction(d: &Direction) -> Str:
+    match d:
+        Direction.North:
+            return "heading north"
+        Direction.South:
+            return "heading south"
+        _:
+            return "heading somewhere"
+
+def area(s: &Shape) -> f64:
+    match s:
+        Shape.Circle(r):
+            return 3.14159 * r * r
+        Shape.Rectangle(w, h):
+            return w * h
+        Shape.Triangle(a, b, c):
+            let sp = (a + b + c) / 2.0
+            return (sp * (sp - a) * (sp - b) * (sp - c)).sqrt()
+
+def main():
+    let dir = Direction.North
+    $print(describe_direction(&dir))
+
+    let shapes: List[Shape] = [
+        Shape.Circle(5.0),
+        Shape.Rectangle(3.0, 4.0),
+        Shape.Triangle(3.0, 4.0, 5.0)
+    ]
+    for shape in &shapes:
+        $print("area: {area(shape)}")

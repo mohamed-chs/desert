@@ -49,6 +49,19 @@ fn statement_location(
         .unwrap_or_else(generated_location)
 }
 
+fn transpile_pattern(pattern: &Pattern) -> String {
+    match pattern {
+        Pattern::Name(name) => name.clone(),
+        Pattern::Tuple(pats) => format!(
+            "({})",
+            pats.iter()
+                .map(transpile_pattern)
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
+    }
+}
+
 pub struct Transpiler;
 
 impl Transpiler {
@@ -69,15 +82,22 @@ impl Transpiler {
         let protocol_names = self.collect_protocol_names(program);
         let rust_uses = self.collect_rust_uses(program);
         let uses_matmul = self.program_uses_matmul(program);
+        let uses_dict = self.program_uses_dict(program);
         let mut resolver = Resolver::new();
         self.seed_resolver_types(program, &mut resolver);
 
-        for rust_use in &rust_uses {
+        let mut all_uses: Vec<String> = rust_uses;
+        if uses_dict && !all_uses.iter().any(|u| u.contains("HashMap")) {
+            all_uses.push("std::collections::HashMap".to_string());
+            all_uses.sort();
+        }
+
+        for rust_use in &all_uses {
             output.push_str(&format!("use {};\n", rust_use));
             source_map.add_mapping(current_line, generated_location());
             current_line += 1;
         }
-        if !rust_uses.is_empty() {
+        if !all_uses.is_empty() {
             output.push('\n');
             source_map.add_mapping(current_line, generated_location());
             current_line += 1;
@@ -275,7 +295,7 @@ impl Transpiler {
                     *current_line += 1;
                 }
                 StatementKind::For {
-                    var,
+                    pattern,
                     iterable,
                     body,
                 } => {
@@ -283,7 +303,7 @@ impl Transpiler {
                     let header = format!(
                         "{}for {} in {} {{\n",
                         indent_str,
-                        var,
+                        transpile_pattern(pattern),
                         self.transpile_expression(iterable, struct_fields, resolver)
                     );
                     output.push_str(&header);
@@ -295,7 +315,9 @@ impl Transpiler {
                     *current_line += 1;
 
                     resolver.enter_scope();
-                    resolver.declare_value(var);
+                    for name in pattern.names() {
+                        resolver.declare_value(name);
+                    }
                     self.transpile_statements(
                         body,
                         indent + 1,
@@ -379,6 +401,51 @@ impl Transpiler {
                             "{}    pub {}: {},\n",
                             indent_str, field.name, f_ty
                         ));
+                        source_map.add_mapping_with_rust_column(
+                            *current_line,
+                            stmt_location.clone(),
+                            indent_str.len() + 5,
+                        );
+                        *current_line += 1;
+                    }
+
+                    let footer = format!("{}}}\n", indent_str);
+                    output.push_str(&footer);
+                    source_map.add_mapping_with_rust_column(
+                        *current_line,
+                        stmt_location.clone(),
+                        rust_line_start_column(&footer),
+                    );
+                    *current_line += 1;
+                }
+                StatementKind::Enum { name, variants } => {
+                    let indent_str = "    ".repeat(indent);
+                    let header = format!("{}enum {} {{\n", indent_str, name);
+                    output.push_str(&header);
+                    source_map.add_mapping_with_rust_column(
+                        *current_line,
+                        stmt_location.clone(),
+                        rust_line_start_column(&header),
+                    );
+                    *current_line += 1;
+
+                    for variant in variants {
+                        let line = if variant.fields.is_empty() {
+                            format!("{}    {},\n", indent_str, variant.name)
+                        } else {
+                            let types_str: Vec<String> = variant
+                                .fields
+                                .iter()
+                                .map(|t| self.transpile_type(t))
+                                .collect();
+                            format!(
+                                "{}    {}({}),\n",
+                                indent_str,
+                                variant.name,
+                                types_str.join(", ")
+                            )
+                        };
+                        output.push_str(&line);
                         source_map.add_mapping_with_rust_column(
                             *current_line,
                             stmt_location.clone(),
@@ -628,7 +695,11 @@ impl Transpiler {
     ) -> String {
         let indent_str = "    ".repeat(indent);
         match &stmt.kind {
-            StatementKind::Let { name, ty, value } => {
+            StatementKind::Let {
+                pattern,
+                ty,
+                value,
+            } => {
                 let ty_str = if let Some(t) = ty {
                     format!(": {}", self.transpile_type(t))
                 } else {
@@ -637,12 +708,16 @@ impl Transpiler {
                 format!(
                     "{}let {}{} = {};\n",
                     indent_str,
-                    name,
+                    transpile_pattern(pattern),
                     ty_str,
                     self.transpile_expression(value, struct_fields, resolver)
                 )
             }
-            StatementKind::Mut { name, ty, value } => {
+            StatementKind::Mut {
+                pattern,
+                ty,
+                value,
+            } => {
                 let ty_str = if let Some(t) = ty {
                     format!(": {}", self.transpile_type(t))
                 } else {
@@ -651,7 +726,7 @@ impl Transpiler {
                 format!(
                     "{}let mut {}{} = {};\n",
                     indent_str,
-                    name,
+                    transpile_pattern(pattern),
                     ty_str,
                     self.transpile_expression(value, struct_fields, resolver)
                 )
@@ -745,7 +820,10 @@ impl Transpiler {
                     .collect();
                 format!("vec![{}]", items_str.join(", "))
             }
-            Expression::Ident(name) => name.clone(),
+            Expression::Ident(name) => match name.as_str() {
+                "Dict" => "HashMap".to_string(),
+                _ => name.clone(),
+            },
             Expression::BinaryOp(left, op, right) => {
                 if matches!(op, BinaryOp::MatMul) {
                     return format!(
@@ -878,6 +956,48 @@ impl Transpiler {
                     "{}[{}]",
                     self.transpile_expression(expr, struct_fields, resolver),
                     self.transpile_expression(index, struct_fields, resolver)
+                )
+            }
+            Expression::Tuple(items) => {
+                let items_str: Vec<String> = items
+                    .iter()
+                    .map(|i| self.transpile_expression(i, struct_fields, resolver))
+                    .collect();
+                if items.len() == 1 {
+                    format!("({},)", items_str[0])
+                } else {
+                    format!("({})", items_str.join(", "))
+                }
+            }
+            Expression::Range(start, end) => {
+                format!(
+                    "{}..{}",
+                    self.transpile_expression(start, struct_fields, resolver),
+                    self.transpile_expression(end, struct_fields, resolver)
+                )
+            }
+            Expression::RangeInclusive(start, end) => {
+                format!(
+                    "{}..={}",
+                    self.transpile_expression(start, struct_fields, resolver),
+                    self.transpile_expression(end, struct_fields, resolver)
+                )
+            }
+            Expression::Lambda { params, body } => {
+                let params_str: Vec<String> = params
+                    .iter()
+                    .map(|p| {
+                        if let Some(t) = &p.ty {
+                            format!("{}: {}", p.name, self.transpile_type(t))
+                        } else {
+                            p.name.clone()
+                        }
+                    })
+                    .collect();
+                format!(
+                    "|{}| {}",
+                    params_str.join(", "),
+                    self.transpile_expression(body, struct_fields, resolver)
                 )
             }
         }
@@ -1050,8 +1170,26 @@ impl Transpiler {
     fn seed_resolver_types(&self, program: &Program, resolver: &mut Resolver) {
         for stmt in &program.statements {
             match &stmt.kind {
-                StatementKind::Struct { name, .. } | StatementKind::Protocol { name, .. } => {
+                StatementKind::Struct { name, .. }
+                | StatementKind::Protocol { name, .. }
+                | StatementKind::Enum { name, .. } => {
                     resolver.declare_type(name);
+                }
+                StatementKind::Import { path, alias } => {
+                    let imported_name = alias
+                        .as_deref()
+                        .unwrap_or_else(|| path.rsplit('/').next().unwrap_or(path));
+                    if imported_name.chars().next().map_or(false, |c| c.is_uppercase()) {
+                        resolver.declare_type(imported_name);
+                    }
+                }
+                StatementKind::FromImport { items, .. } => {
+                    for item in items {
+                        let name = item.alias.as_deref().unwrap_or(&item.name);
+                        if name.chars().next().map_or(false, |c| c.is_uppercase()) {
+                            resolver.declare_type(name);
+                        }
+                    }
                 }
                 _ => {}
             }
@@ -1060,13 +1198,15 @@ impl Transpiler {
 
     fn declare_statement_symbols(&self, stmt: &Statement, resolver: &mut Resolver) {
         match &stmt.kind {
-            StatementKind::Let { name, .. } | StatementKind::Mut { name, .. } => {
-                resolver.declare_value(name)
+            StatementKind::Let { pattern, .. } | StatementKind::Mut { pattern, .. } => {
+                for name in pattern.names() {
+                    resolver.declare_value(name);
+                }
             }
             StatementKind::Def { name, .. } => resolver.declare_value(name),
-            StatementKind::Struct { name, .. } | StatementKind::Protocol { name, .. } => {
-                resolver.declare_type(name)
-            }
+            StatementKind::Struct { name, .. }
+            | StatementKind::Protocol { name, .. }
+            | StatementKind::Enum { name, .. } => resolver.declare_type(name),
             _ => {}
         }
     }
@@ -1167,15 +1307,22 @@ impl Transpiler {
             Type::Simple(name) => match name.as_str() {
                 "List" => "Vec".to_string(),
                 "Str" => "String".to_string(),
+                "Dict" => "HashMap".to_string(),
                 _ => name.clone(),
             },
             Type::Generic(name, inner) => {
                 let name = match name.as_str() {
                     "List" => "Vec",
+                    "Dict" => "HashMap",
                     _ => name,
                 };
                 let inner_str: Vec<String> = inner.iter().map(|t| self.transpile_type(t)).collect();
                 format!("{}<{}>", name, inner_str.join(", "))
+            }
+            Type::Tuple(types) => {
+                let inner_str: Vec<String> =
+                    types.iter().map(|t| self.transpile_type(t)).collect();
+                format!("({})", inner_str.join(", "))
             }
             Type::SharedRef(inner) => format!("&{}", self.transpile_type(inner)),
             Type::UniqueRef(inner) => format!("&mut {}", self.transpile_type(inner)),
@@ -1255,6 +1402,7 @@ impl Transpiler {
                 self.expression_uses_matmul(expr)
             }
             StatementKind::Struct { .. }
+            | StatementKind::Enum { .. }
             | StatementKind::Import { .. }
             | StatementKind::FromImport { .. }
             | StatementKind::PyImport(_)
@@ -1285,13 +1433,85 @@ impl Transpiler {
             | Expression::Not(expr)
             | Expression::Question(expr)
             | Expression::Unwrap(expr) => self.expression_uses_matmul(expr),
-            Expression::Index(expr, idx) => {
+            Expression::Index(expr, idx)
+            | Expression::Range(expr, idx)
+            | Expression::RangeInclusive(expr, idx) => {
                 self.expression_uses_matmul(expr) || self.expression_uses_matmul(idx)
             }
-            Expression::Literal(Literal::List(items)) => {
+            Expression::Tuple(items) | Expression::Literal(Literal::List(items)) => {
                 items.iter().any(|item| self.expression_uses_matmul(item))
             }
+            Expression::Lambda { body, .. } => self.expression_uses_matmul(body),
             Expression::Literal(_) | Expression::Ident(_) => false,
+        }
+    }
+
+    fn program_uses_dict(&self, program: &Program) -> bool {
+        program
+            .statements
+            .iter()
+            .any(|s| self.statement_uses_dict(s))
+    }
+
+    fn statement_uses_dict(&self, statement: &Statement) -> bool {
+        match &statement.kind {
+            StatementKind::Let { ty, value, .. } | StatementKind::Mut { ty, value, .. } => {
+                ty.as_ref().is_some_and(|t| self.type_uses_dict(t))
+                    || self.expression_uses_dict(value)
+            }
+            StatementKind::Def {
+                params,
+                return_ty,
+                body,
+                ..
+            } => {
+                params
+                    .iter()
+                    .any(|p| p.ty.as_ref().is_some_and(|t| self.type_uses_dict(t)))
+                    || return_ty.as_ref().is_some_and(|t| self.type_uses_dict(t))
+                    || body.iter().any(|s| self.statement_uses_dict(s))
+            }
+            StatementKind::Struct { fields, .. } => fields
+                .iter()
+                .any(|f| f.ty.as_ref().is_some_and(|t| self.type_uses_dict(t))),
+            StatementKind::Enum { variants, .. } => variants
+                .iter()
+                .any(|v| v.fields.iter().any(|t| self.type_uses_dict(t))),
+            StatementKind::If {
+                then_block,
+                else_block,
+                ..
+            } => {
+                then_block.iter().any(|s| self.statement_uses_dict(s))
+                    || else_block
+                        .as_ref()
+                        .is_some_and(|b| b.iter().any(|s| self.statement_uses_dict(s)))
+            }
+            StatementKind::For { body, .. } | StatementKind::While { body, .. } => {
+                body.iter().any(|s| self.statement_uses_dict(s))
+            }
+            StatementKind::Protocol { methods, .. } | StatementKind::Impl { methods, .. } => {
+                methods.iter().any(|s| self.statement_uses_dict(s))
+            }
+            StatementKind::Match { arms, .. } => arms
+                .iter()
+                .any(|(_, body)| body.iter().any(|s| self.statement_uses_dict(s))),
+            _ => false,
+        }
+    }
+
+    fn expression_uses_dict(&self, _expr: &Expression) -> bool {
+        false
+    }
+
+    fn type_uses_dict(&self, ty: &Type) -> bool {
+        match ty {
+            Type::Simple(name) => name == "Dict",
+            Type::Generic(name, inner) => {
+                name == "Dict" || inner.iter().any(|t| self.type_uses_dict(t))
+            }
+            Type::Tuple(types) => types.iter().any(|t| self.type_uses_dict(t)),
+            Type::SharedRef(inner) | Type::UniqueRef(inner) => self.type_uses_dict(inner),
         }
     }
 
@@ -1381,72 +1601,43 @@ mod tests {
     }
 
     #[test]
-
     fn test_transpile_basic() {
         let input = "let x = 10\ndef foo(y):\n    let z = y\n    z";
-
         let lexer = Lexer::new(input);
-
         let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
-
         let (_, program) = parse_program(&tokens).unwrap();
-
         let transpiler = Transpiler::new();
-
         let (rust_code, _) = transpile_program(&transpiler, &program, input);
-
         let expected = "let x = 10;\nfn foo(y) {\n    let z = y;\n    z;\n}\n";
-
         assert_eq!(rust_code, expected);
     }
 
     #[test]
-
     fn test_transpile_factorial() {
         let input = "
-
     def factorial(n):
-
         if n == 0:
-
             return 1
-
         return n * factorial(n - 1)
-
     ";
-
         let lexer = Lexer::new(input.trim());
-
         let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
-
         let (_, program) = parse_program(&tokens).unwrap();
-
         let transpiler = Transpiler::new();
-
         let (rust_code, _) = transpile_program(&transpiler, &program, input.trim());
-
         let expected = "fn factorial(n) -> impl std::fmt::Debug {\n    if n == 0 {\n        return 1;\n    }\n    return n * factorial(n - 1);\n}\n";
-
         assert_eq!(rust_code, expected);
     }
 
     #[test]
-
     fn test_transpile_hello_world() {
         let input = "def main():\n    $print(\"Hello, Desert!\")";
-
         let lexer = Lexer::new(input);
-
         let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
-
         let (_, program) = parse_program(&tokens).unwrap();
-
         let transpiler = Transpiler::new();
-
         let (rust_code, _) = transpile_program(&transpiler, &program, input);
-
         let expected = "fn main() {\n    println!(\"{}\", \"Hello, Desert!\".to_string());\n}\n";
-
         assert_eq!(rust_code, expected);
     }
 
@@ -1458,7 +1649,6 @@ mod tests {
         let (_, program) = parse_program(&tokens).unwrap();
         let transpiler = Transpiler::new();
         let (_, source_map) = transpile_program(&transpiler, &program, input);
-
         let second = source_map
             .get_location(1)
             .expect("expected source location for second Rust line");
@@ -1530,38 +1720,24 @@ mod tests {
     }
 
     #[test]
-
     fn test_transpile_types() {
         let input = "let x: List[i32] = [1, 2, 3]";
-
         let lexer = Lexer::new(input);
-
         let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
-
         let (_, program) = parse_program(&tokens).unwrap();
-
         let transpiler = Transpiler::new();
-
         let (rust_code, _) = transpile_program(&transpiler, &program, input);
-
         assert_eq!(rust_code, "let x: Vec<i32> = vec![1, 2, 3];\n");
     }
 
     #[test]
-
     fn test_transpile_borrows() {
         let input = "def foo(x: &i32, y: ~List[f32]) -> i32:\n    return 0";
-
         let lexer = Lexer::new(input);
-
         let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
-
         let (_, program) = parse_program(&tokens).unwrap();
-
         let transpiler = Transpiler::new();
-
         let (rust_code, _) = transpile_program(&transpiler, &program, input);
-
         assert_eq!(
             rust_code,
             "fn foo(x: &i32, y: &mut Vec<f32>) -> i32 {\n    return 0;\n}\n"
@@ -1593,20 +1769,13 @@ mod tests {
     }
 
     #[test]
-
     fn test_transpile_unified_dot() {
         let input = "struct Path:\n    raw: Str\nlet x = Path.new(\"foo\")\nlet y = x.exists()";
-
         let lexer = Lexer::new(input);
-
         let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
-
         let (_, program) = parse_program(&tokens).unwrap();
-
         let transpiler = Transpiler::new();
-
         let (rust_code, _) = transpile_program(&transpiler, &program, input);
-
         assert_eq!(
             rust_code,
             "struct Path {\n    pub raw: String,\n}\nlet x = Path::new(\"foo\".to_string());\nlet y = x.exists();\n"
@@ -1621,7 +1790,6 @@ mod tests {
         let (_, program) = parse_program(&tokens).unwrap();
         let transpiler = Transpiler::new();
         let (rust_code, _) = transpile_program(&transpiler, &program, input);
-
         assert_eq!(rust_code, "let Path = 1;\nlet y = Path.new();\n");
     }
 
@@ -1633,7 +1801,6 @@ mod tests {
         let (_, program) = parse_program(&tokens).unwrap();
         let transpiler = Transpiler::new();
         let (rust_code, _) = transpile_program(&transpiler, &program, input);
-
         assert_eq!(
             rust_code,
             "struct Path {\n    pub raw: String,\n}\nif 1 == 1 {\n    let Path = 1;\n}\nlet y = Path::new();\n"
@@ -1905,5 +2072,144 @@ mod tests {
         assert!(!rust_code.contains("#[allow(unreachable_patterns)]"));
         assert!(!rust_code.contains("panic!(\"non-exhaustive match in Desert source\")"));
         assert_eq!(rust_code.matches("_ => {").count(), 0);
+    }
+
+    #[test]
+    fn test_transpile_tuple_literal() {
+        let input = "let t = (1, 2, 3)";
+        let lexer = Lexer::new(input);
+        let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
+        let (_, program) = parse_program(&tokens).unwrap();
+        let transpiler = Transpiler::new();
+        let (rust_code, _) = transpile_program(&transpiler, &program, input);
+        assert_eq!(rust_code, "let t = (1, 2, 3);\n");
+    }
+
+    #[test]
+    fn test_transpile_single_element_tuple() {
+        let input = "let t = (42,)";
+        let lexer = Lexer::new(input);
+        let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
+        let (_, program) = parse_program(&tokens).unwrap();
+        let transpiler = Transpiler::new();
+        let (rust_code, _) = transpile_program(&transpiler, &program, input);
+        assert_eq!(rust_code, "let t = (42,);\n");
+    }
+
+    #[test]
+    fn test_transpile_tuple_type() {
+        let input = "let p: (i32, i32) = (1, 2)";
+        let lexer = Lexer::new(input);
+        let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
+        let (_, program) = parse_program(&tokens).unwrap();
+        let transpiler = Transpiler::new();
+        let (rust_code, _) = transpile_program(&transpiler, &program, input);
+        assert_eq!(rust_code, "let p: (i32, i32) = (1, 2);\n");
+    }
+
+    #[test]
+    fn test_transpile_let_destructure() {
+        let input = "let (a, b) = point";
+        let lexer = Lexer::new(input);
+        let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
+        let (_, program) = parse_program(&tokens).unwrap();
+        let transpiler = Transpiler::new();
+        let (rust_code, _) = transpile_program(&transpiler, &program, input);
+        assert_eq!(rust_code, "let (a, b) = point;\n");
+    }
+
+    #[test]
+    fn test_transpile_for_destructure() {
+        let input = "for (k, v) in items:\n    $print(k)";
+        let lexer = Lexer::new(input);
+        let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
+        let (_, program) = parse_program(&tokens).unwrap();
+        let transpiler = Transpiler::new();
+        let (rust_code, _) = transpile_program(&transpiler, &program, input);
+        assert!(rust_code.contains("for (k, v) in items {"));
+    }
+
+    #[test]
+    fn test_transpile_range() {
+        let input = "for i in 0..10:\n    $print(i)";
+        let lexer = Lexer::new(input);
+        let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
+        let (_, program) = parse_program(&tokens).unwrap();
+        let transpiler = Transpiler::new();
+        let (rust_code, _) = transpile_program(&transpiler, &program, input);
+        assert!(rust_code.contains("for i in 0..10 {"));
+    }
+
+    #[test]
+    fn test_transpile_range_inclusive() {
+        let input = "for i in 0..=9:\n    $print(i)";
+        let lexer = Lexer::new(input);
+        let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
+        let (_, program) = parse_program(&tokens).unwrap();
+        let transpiler = Transpiler::new();
+        let (rust_code, _) = transpile_program(&transpiler, &program, input);
+        assert!(rust_code.contains("for i in 0..=9 {"));
+    }
+
+    #[test]
+    fn test_transpile_lambda() {
+        let input = "let add = |x, y| x + y";
+        let lexer = Lexer::new(input);
+        let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
+        let (_, program) = parse_program(&tokens).unwrap();
+        let transpiler = Transpiler::new();
+        let (rust_code, _) = transpile_program(&transpiler, &program, input);
+        assert_eq!(rust_code, "let add = |x, y| x + y;\n");
+    }
+
+    #[test]
+    fn test_transpile_lambda_typed() {
+        let input = "let add = |x: i32, y: i32| x + y";
+        let lexer = Lexer::new(input);
+        let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
+        let (_, program) = parse_program(&tokens).unwrap();
+        let transpiler = Transpiler::new();
+        let (rust_code, _) = transpile_program(&transpiler, &program, input);
+        assert_eq!(rust_code, "let add = |x: i32, y: i32| x + y;\n");
+    }
+
+    #[test]
+    fn test_transpile_enum() {
+        let input = "enum Color:\n    Red\n    Green\n    Blue";
+        let lexer = Lexer::new(input);
+        let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
+        let (_, program) = parse_program(&tokens).unwrap();
+        let transpiler = Transpiler::new();
+        let (rust_code, _) = transpile_program(&transpiler, &program, input);
+        assert_eq!(
+            rust_code,
+            "enum Color {\n    Red,\n    Green,\n    Blue,\n}\n"
+        );
+    }
+
+    #[test]
+    fn test_transpile_enum_with_data() {
+        let input = "enum Shape:\n    Circle(f64)\n    Rectangle(f64, f64)\n    Point";
+        let lexer = Lexer::new(input);
+        let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
+        let (_, program) = parse_program(&tokens).unwrap();
+        let transpiler = Transpiler::new();
+        let (rust_code, _) = transpile_program(&transpiler, &program, input);
+        assert_eq!(
+            rust_code,
+            "enum Shape {\n    Circle(f64),\n    Rectangle(f64, f64),\n    Point,\n}\n"
+        );
+    }
+
+    #[test]
+    fn test_transpile_dict_type() {
+        let input = "let m: Dict[Str, i32] = Dict.new()";
+        let lexer = Lexer::new(input);
+        let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
+        let (_, program) = parse_program(&tokens).unwrap();
+        let transpiler = Transpiler::new();
+        let (rust_code, _) = transpile_program(&transpiler, &program, input);
+        assert!(rust_code.contains("use std::collections::HashMap;"));
+        assert!(rust_code.contains("let m: HashMap<String, i32> = HashMap::new();"));
     }
 }

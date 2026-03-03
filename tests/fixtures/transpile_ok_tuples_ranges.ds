@@ -1,0 +1,7 @@
+def main():
+    let pair = (10, 20)
+    let (x, y) = (1, 2)
+    for i in 0..5:
+        $print("{i}")
+    for j in 1..=3:
+        $print("{j}")

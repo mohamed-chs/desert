@@ -1,0 +1,14 @@
+def main():
+    let double = |x: i32| x * 2
+    let result = double(21)
+    $print("double(21) = {result}")
+
+    let add = |a: i32, b: i32| a + b
+    $print("add(3, 4) = {add(3, 4)}")
+
+    let greet = || "hello"
+    $print(greet())
+
+    let nums: List[i32] = [1, 2, 3, 4, 5]
+    let squares: List[i32] = nums.iter().map(|x| x * x).collect()
+    $print("squares: {squares}")

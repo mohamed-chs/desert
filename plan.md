@@ -55,3 +55,10 @@ This roadmap follows current project direction: prioritize project workflow and 
 - Recent shipped behavior: semantic validation now rejects generic-call syntax on Desert struct constructors (for example `Pair[i32](...)`) with a direct Desert error, avoiding invalid Rust constructor-call fallback.
 - Recent shipped behavior: semantic validation now rejects duplicate `match` wildcard arms and rejects non-wildcard arms after a wildcard arm, preventing unreachable-pattern lowering drift.
 - Recent shipped behavior: language control-flow now includes `while`, `break`, and `continue` (with semantic checks that loop-control stays inside loop bodies), plus logical operators (`and`/`or`/`not`), modulo (`%`), and `elif` chaining.
+- Recent shipped behavior: tuple literals `(a, b)`, tuple types `(i32, Str)`, and destructuring patterns in `let`/`mut`/`for` bindings.
+- Recent shipped behavior: range expressions `0..10` (exclusive) and `0..=10` (inclusive).
+- Recent shipped behavior: lambda expressions `|x| x * 2`, `|| expr` with typed params and semantic body validation.
+- Recent shipped behavior: `enum` declarations with simple and data-carrying variants, plus Rust lowering and semantic duplicate-variant validation.
+- Recent shipped behavior: `Dict[K, V]` type mapping to `HashMap<K, V>` with automatic import insertion.
+- Recent shipped behavior: postfix expressions (`.method()`, `[i]`, `()`, `?`, `!!`) now apply to any primary expression (not just identifiers), enabling patterns like `(expr).method()`.
+- Recent shipped behavior: imported uppercase names from `import rust...` and `from ... import ...` now register as resolver type symbols, enabling `::` lowering on imported types.

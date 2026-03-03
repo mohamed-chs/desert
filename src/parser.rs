@@ -49,6 +49,22 @@ fn parse_type(input: &[TokenSpan]) -> ParseResult<'_, Type> {
         return Ok((rest, Type::UniqueRef(Box::new(inner))));
     }
 
+    if let Ok((rest, _)) = token(Token::LParen)(input) {
+        let mut types = Vec::new();
+        let mut current_input = rest;
+        while let Ok((next_input, ty)) = parse_type(current_input) {
+            types.push(ty);
+            current_input = next_input;
+            if let Ok((next_input, _)) = token(Token::Comma)(current_input) {
+                current_input = next_input;
+            } else {
+                break;
+            }
+        }
+        let (rest, _) = token(Token::RParen)(current_input)?;
+        return Ok((rest, Type::Tuple(types)));
+    }
+
     let (current_input, name) = ident(input)?;
     if let Ok((rest, _)) = token(Token::LBracket)(current_input) {
         let mut generics = Vec::new();
@@ -75,6 +91,131 @@ fn float_lit(input: &[TokenSpan]) -> ParseResult<'_, f64> {
     } else {
         Err(nom::Err::Error(Error::new(input, ErrorKind::Tag)))
     }
+}
+
+fn parse_pattern(input: &[TokenSpan]) -> ParseResult<'_, Pattern> {
+    if let Ok((rest, _)) = token(Token::LParen)(input) {
+        let mut patterns = Vec::new();
+        let mut current_input = rest;
+        while let Ok((next_input, pat)) = parse_pattern(current_input) {
+            patterns.push(pat);
+            current_input = next_input;
+            if let Ok((next_input, _)) = token(Token::Comma)(current_input) {
+                current_input = next_input;
+            } else {
+                break;
+            }
+        }
+        let (rest, _) = token(Token::RParen)(current_input)?;
+        return Ok((rest, Pattern::Tuple(patterns)));
+    }
+    let (rest, name) = ident(input)?;
+    Ok((rest, Pattern::Name(name)))
+}
+
+fn postfix_expression<'a>(
+    input: &'a [TokenSpan],
+    base: Expression,
+) -> ParseResult<'a, Expression> {
+    let mut current_input = input;
+    let mut expr = base;
+    loop {
+        if let Ok((next_input, _)) = token(Token::Dot)(current_input) {
+            let (next_input, member) = ident(next_input)?;
+            expr = Expression::MemberAccess(Box::new(expr), member);
+            current_input = next_input;
+            continue;
+        }
+        if let Ok((next_input, _)) = token(Token::LBracket)(current_input) {
+            let mut types = Vec::new();
+            let mut inner_input = next_input;
+            let mut generic_call_parsed = false;
+
+            while let Ok((next_input, ty)) = parse_type(inner_input) {
+                types.push(ty);
+                inner_input = next_input;
+                if let Ok((next_input, _)) = token(Token::Comma)(inner_input) {
+                    inner_input = next_input;
+                } else {
+                    break;
+                }
+            }
+
+            if !types.is_empty()
+                && let Ok((after_bracket, _)) = token(Token::RBracket)(inner_input)
+                && let Ok((after_paren, _)) = token(Token::LParen)(after_bracket)
+            {
+                let mut args = Vec::new();
+                let mut arg_input = after_paren;
+                while let Ok((next_input, arg)) = expression(arg_input) {
+                    args.push(arg);
+                    arg_input = next_input;
+                    if let Ok((next_input, _)) = token(Token::Comma)(arg_input) {
+                        arg_input = next_input;
+                    } else {
+                        break;
+                    }
+                }
+                let (final_input, _) = token(Token::RParen)(arg_input)?;
+                expr = Expression::GenericCall(Box::new(expr), types, args);
+                current_input = final_input;
+                generic_call_parsed = true;
+            }
+
+            if generic_call_parsed {
+                continue;
+            }
+
+            if let Ok((inner_input, index_expr)) = expression(next_input) {
+                let (final_input, _) = token(Token::RBracket)(inner_input)?;
+                expr = Expression::Index(Box::new(expr), Box::new(index_expr));
+                current_input = final_input;
+                continue;
+            }
+        }
+        if let Ok((next_input, _)) = token(Token::LParen)(current_input) {
+            let mut args = Vec::new();
+            let mut arg_input = next_input;
+
+            let mut has_indent = false;
+            if let Ok((next_input, _)) = token(Token::Indent)(arg_input) {
+                arg_input = next_input;
+                has_indent = true;
+            }
+
+            while let Ok((next_input, arg)) = expression(arg_input) {
+                args.push(arg);
+                arg_input = next_input;
+                if let Ok((next_input, _)) = token(Token::Comma)(arg_input) {
+                    arg_input = next_input;
+                } else {
+                    break;
+                }
+            }
+
+            if has_indent {
+                let (next_input, _) = token(Token::Dedent)(arg_input)?;
+                arg_input = next_input;
+            }
+
+            let (final_input, _) = token(Token::RParen)(arg_input)?;
+            expr = Expression::Call(Box::new(expr), args);
+            current_input = final_input;
+            continue;
+        }
+        if let Ok((next_input, _)) = token(Token::Question)(current_input) {
+            expr = Expression::Question(Box::new(expr));
+            current_input = next_input;
+            continue;
+        }
+        if let Ok((next_input, _)) = token(Token::BangBang)(current_input) {
+            expr = Expression::Unwrap(Box::new(expr));
+            current_input = next_input;
+            continue;
+        }
+        break;
+    }
+    Ok((current_input, expr))
 }
 
 fn primary_expression(input: &[TokenSpan]) -> ParseResult<'_, Expression> {
@@ -178,114 +319,82 @@ fn primary_expression(input: &[TokenSpan]) -> ParseResult<'_, Expression> {
         let (rest, expr) = expression(rest)?;
         return Ok((rest, Expression::Move(Box::new(expr))));
     }
-    if let Ok((rest, name)) = ident(input) {
+    // Lambda: |params| expr
+    if let Ok((rest, _)) = token(Token::Pipe)(input) {
+        let mut params = Vec::new();
         let mut current_input = rest;
-        let mut expr = Expression::Ident(name);
-
-        loop {
-            if let Ok((next_input, _)) = token(Token::Dot)(current_input) {
-                let (next_input, member) = ident(next_input)?;
-                expr = Expression::MemberAccess(Box::new(expr), member);
-                current_input = next_input;
-                continue;
-            }
-            if let Ok((next_input, _)) = token(Token::LBracket)(current_input) {
-                // Try GenericCall first
-                let mut types = Vec::new();
-                let mut inner_input = next_input;
-                let mut generic_call_parsed = false;
-
-                while let Ok((next_input, ty)) = parse_type(inner_input) {
-                    types.push(ty);
-                    inner_input = next_input;
-                    if let Ok((next_input, _)) = token(Token::Comma)(inner_input) {
-                        inner_input = next_input;
-                    } else {
-                        break;
-                    }
+        // Handle || (no params)
+        if token(Token::Pipe)(current_input).is_err() {
+            loop {
+                let mut is_mut = false;
+                if let Ok((next, _)) = token(Token::Mut)(current_input) {
+                    is_mut = true;
+                    current_input = next;
                 }
-
-                if !types.is_empty()
-                    && let Ok((after_bracket, _)) = token(Token::RBracket)(inner_input)
-                    && let Ok((after_paren, _)) = token(Token::LParen)(after_bracket)
-                {
-                    let mut args = Vec::new();
-                    let mut arg_input = after_paren;
-                    while let Ok((next_input, arg)) = expression(arg_input) {
-                        args.push(arg);
-                        arg_input = next_input;
-                        if let Ok((next_input, _)) = token(Token::Comma)(arg_input) {
-                            arg_input = next_input;
-                        } else {
-                            break;
-                        }
-                    }
-                    let (final_input, _) = token(Token::RParen)(arg_input)?;
-                    expr = Expression::GenericCall(Box::new(expr), types, args);
-                    current_input = final_input;
-                    generic_call_parsed = true;
+                let (next_input, p_name) = ident(current_input)?;
+                let mut p_ty = None;
+                let mut inner = next_input;
+                if let Ok((next, _)) = token(Token::Colon)(inner) {
+                    let (next, ty) = parse_type(next)?;
+                    p_ty = Some(ty);
+                    inner = next;
                 }
-
-                if generic_call_parsed {
-                    continue;
-                }
-
-                // If not a GenericCall, try Indexing
-                if let Ok((inner_input, index_expr)) = expression(next_input) {
-                    let (final_input, _) = token(Token::RBracket)(inner_input)?;
-                    expr = Expression::Index(Box::new(expr), Box::new(index_expr));
-                    current_input = final_input;
-                    continue;
+                params.push(Param {
+                    name: p_name,
+                    ty: p_ty,
+                    is_mut,
+                });
+                current_input = inner;
+                if let Ok((next, _)) = token(Token::Comma)(current_input) {
+                    current_input = next;
+                } else {
+                    break;
                 }
             }
-            if let Ok((next_input, _)) = token(Token::LParen)(current_input) {
-                let mut args = Vec::new();
-                let mut arg_input = next_input;
-
-                let mut has_indent = false;
-                if let Ok((next_input, _)) = token(Token::Indent)(arg_input) {
-                    arg_input = next_input;
-                    has_indent = true;
-                }
-
-                while let Ok((next_input, arg)) = expression(arg_input) {
-                    args.push(arg);
-                    arg_input = next_input;
-                    if let Ok((next_input, _)) = token(Token::Comma)(arg_input) {
-                        arg_input = next_input;
-                    } else {
-                        break;
-                    }
-                }
-
-                if has_indent {
-                    let (next_input, _) = token(Token::Dedent)(arg_input)?;
-                    arg_input = next_input;
-                }
-
-                let (final_input, _) = token(Token::RParen)(arg_input)?;
-                expr = Expression::Call(Box::new(expr), args);
-                current_input = final_input;
-                continue;
-            }
-            if let Ok((next_input, _)) = token(Token::Question)(current_input) {
-                expr = Expression::Question(Box::new(expr));
-                current_input = next_input;
-                continue;
-            }
-            if let Ok((next_input, _)) = token(Token::BangBang)(current_input) {
-                expr = Expression::Unwrap(Box::new(expr));
-                current_input = next_input;
-                continue;
-            }
-            break;
+            let (rest, _) = token(Token::Pipe)(current_input)?;
+            current_input = rest;
+        } else {
+            current_input = token(Token::Pipe)(current_input)?.0;
         }
-        return Ok((current_input, expr));
+        let (rest, body) = expression(current_input)?;
+        return Ok((
+            rest,
+            Expression::Lambda {
+                params,
+                body: Box::new(body),
+            },
+        ));
     }
+    // Identifier
+    if let Ok((rest, name)) = ident(input) {
+        let expr = Expression::Ident(name);
+        return postfix_expression(rest, expr);
+    }
+    // Parenthesized expression or tuple literal
     if let Ok((rest, _)) = token(Token::LParen)(input) {
-        let (rest, expr) = expression(rest)?;
-        let (rest, _) = token(Token::RParen)(rest)?;
-        return Ok((rest, expr));
+        // Empty tuple: ()
+        if let Ok((rest, _)) = token(Token::RParen)(rest) {
+            return postfix_expression(rest, Expression::Tuple(Vec::new()));
+        }
+        let (after_first, first) = expression(rest)?;
+        // Check for comma → tuple
+        if let Ok((mut current_input, _)) = token(Token::Comma)(after_first) {
+            let mut items = vec![first];
+            while let Ok((next_input, expr)) = expression(current_input) {
+                items.push(expr);
+                current_input = next_input;
+                if let Ok((next_input, _)) = token(Token::Comma)(current_input) {
+                    current_input = next_input;
+                } else {
+                    break;
+                }
+            }
+            let (rest, _) = token(Token::RParen)(current_input)?;
+            return postfix_expression(rest, Expression::Tuple(items));
+        }
+        // Single parenthesized expression
+        let (rest, _) = token(Token::RParen)(after_first)?;
+        return postfix_expression(rest, first);
     }
     Err(nom::Err::Error(Error::new(input, ErrorKind::Tag)))
 }
@@ -361,8 +470,24 @@ fn logical_or_expression(input: &[TokenSpan]) -> ParseResult<'_, Expression> {
     Ok((current_input, left))
 }
 
-fn assignment_expression(input: &[TokenSpan]) -> ParseResult<'_, Expression> {
+fn range_expression(input: &[TokenSpan]) -> ParseResult<'_, Expression> {
     let (input, left) = logical_or_expression(input)?;
+    if let Ok((rest, _)) = token(Token::DotDotEq)(input) {
+        let (rest, right) = logical_or_expression(rest)?;
+        return Ok((
+            rest,
+            Expression::RangeInclusive(Box::new(left), Box::new(right)),
+        ));
+    }
+    if let Ok((rest, _)) = token(Token::DotDot)(input) {
+        let (rest, right) = logical_or_expression(rest)?;
+        return Ok((rest, Expression::Range(Box::new(left), Box::new(right))));
+    }
+    Ok((input, left))
+}
+
+fn assignment_expression(input: &[TokenSpan]) -> ParseResult<'_, Expression> {
+    let (input, left) = range_expression(input)?;
     if let Ok((rest, _)) = token(Token::Assign)(input) {
         let (rest, right) = assignment_expression(rest)?;
         return Ok((
@@ -379,7 +504,7 @@ fn expression(input: &[TokenSpan]) -> ParseResult<'_, Expression> {
 
 fn let_statement(input: &[TokenSpan]) -> ParseResult<'_, StatementKind> {
     let (input, _) = token(Token::Let)(input)?;
-    let (input, name) = ident(input)?;
+    let (input, pattern) = parse_pattern(input)?;
     let mut current_input = input;
     let mut ty = None;
     if let Ok((next_input, _)) = token(Token::Colon)(current_input) {
@@ -389,12 +514,12 @@ fn let_statement(input: &[TokenSpan]) -> ParseResult<'_, StatementKind> {
     }
     let (input, _) = token(Token::Assign)(current_input)?;
     let (input, value) = expression(input)?;
-    Ok((input, StatementKind::Let { name, ty, value }))
+    Ok((input, StatementKind::Let { pattern, ty, value }))
 }
 
 fn mut_statement(input: &[TokenSpan]) -> ParseResult<'_, StatementKind> {
     let (input, _) = token(Token::Mut)(input)?;
-    let (input, name) = ident(input)?;
+    let (input, pattern) = parse_pattern(input)?;
     let mut current_input = input;
     let mut ty = None;
     if let Ok((next_input, _)) = token(Token::Colon)(current_input) {
@@ -404,7 +529,7 @@ fn mut_statement(input: &[TokenSpan]) -> ParseResult<'_, StatementKind> {
     }
     let (input, _) = token(Token::Assign)(current_input)?;
     let (input, value) = expression(input)?;
-    Ok((input, StatementKind::Mut { name, ty, value }))
+    Ok((input, StatementKind::Mut { pattern, ty, value }))
 }
 
 fn import_path(input: &[TokenSpan]) -> ParseResult<'_, String> {
@@ -628,6 +753,42 @@ fn struct_statement(input: &[TokenSpan]) -> ParseResult<'_, StatementKind> {
     Ok((input, StatementKind::Struct { name, fields }))
 }
 
+fn enum_statement(input: &[TokenSpan]) -> ParseResult<'_, StatementKind> {
+    let (input, _) = token(Token::Enum)(input)?;
+    let (input, name) = ident(input)?;
+    let (input, _) = token(Token::Colon)(input)?;
+    let (input, _) = token(Token::Indent)(input)?;
+
+    let mut variants = Vec::new();
+    let mut current_input = input;
+    while let Ok((next_input, v_name)) = ident(current_input) {
+        let mut fields = Vec::new();
+        let mut inner_input = next_input;
+        if let Ok((next_input, _)) = token(Token::LParen)(inner_input) {
+            let mut arg_input = next_input;
+            while let Ok((next_input, ty)) = parse_type(arg_input) {
+                fields.push(ty);
+                arg_input = next_input;
+                if let Ok((next_input, _)) = token(Token::Comma)(arg_input) {
+                    arg_input = next_input;
+                } else {
+                    break;
+                }
+            }
+            let (next_input, _) = token(Token::RParen)(arg_input)?;
+            inner_input = next_input;
+        }
+        variants.push(EnumVariant {
+            name: v_name,
+            fields,
+        });
+        current_input = inner_input;
+    }
+
+    let (input, _) = token(Token::Dedent)(current_input)?;
+    Ok((input, StatementKind::Enum { name, variants }))
+}
+
 fn protocol_statement(input: &[TokenSpan]) -> ParseResult<'_, StatementKind> {
     let (input, _) = token(Token::Protocol)(input)?;
     let (input, name) = ident(input)?;
@@ -719,6 +880,7 @@ fn token_text(token: &Token) -> String {
         Token::Match => "match".to_string(),
         Token::As => "as".to_string(),
         Token::From => "from".to_string(),
+        Token::Enum => "enum".to_string(),
         Token::And => "and".to_string(),
         Token::Or => "or".to_string(),
         Token::Not => "not".to_string(),
@@ -726,7 +888,10 @@ fn token_text(token: &Token) -> String {
         Token::Arrow => "->".to_string(),
         Token::Question => "?".to_string(),
         Token::BangBang => "!!".to_string(),
+        Token::DotDotEq => "..=".to_string(),
+        Token::DotDot => "..".to_string(),
         Token::Dot => ".".to_string(),
+        Token::Pipe => "|".to_string(),
         Token::LBracket => "[".to_string(),
         Token::RBracket => "]".to_string(),
         Token::LParen => "(".to_string(),
@@ -792,7 +957,7 @@ fn match_statement(input: &[TokenSpan]) -> ParseResult<'_, StatementKind> {
 
 fn for_statement(input: &[TokenSpan]) -> ParseResult<'_, StatementKind> {
     let (input, _) = token(Token::For)(input)?;
-    let (input, var) = ident(input)?;
+    let (input, pattern) = parse_pattern(input)?;
     let (input, _) = token(Token::In)(input)?;
     let (input, iterable) = expression(input)?;
     let (input, _) = token(Token::Colon)(input)?;
@@ -800,7 +965,7 @@ fn for_statement(input: &[TokenSpan]) -> ParseResult<'_, StatementKind> {
     Ok((
         input,
         StatementKind::For {
-            var,
+            pattern,
             iterable,
             body,
         },
@@ -851,6 +1016,8 @@ fn statement(input: &[TokenSpan]) -> ParseResult<'_, Statement> {
     } else if let Ok((rest, kind)) = continue_statement(input) {
         (rest, kind)
     } else if let Ok((rest, kind)) = struct_statement(input) {
+        (rest, kind)
+    } else if let Ok((rest, kind)) = enum_statement(input) {
         (rest, kind)
     } else if let Ok((rest, kind)) = protocol_statement(input) {
         (rest, kind)
@@ -924,97 +1091,63 @@ mod tests {
     use crate::lexer::Lexer;
 
     #[test]
-
     fn test_parse_let() {
         let input = "let x = 10";
-
         let lexer = Lexer::new(input);
-
         let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
-
         let (_, program) = parse_program(&tokens).unwrap();
-
         assert_eq!(program.statements.len(), 1);
-
         assert_eq!(program.statements[0].span, 0..10);
     }
 
     #[test]
-
     fn test_parse_def() {
         let input = "def foo(x, y):\n    let z = x\n    z";
-
         let lexer = Lexer::new(input);
-
         let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
-
         let (_, program) = parse_program(&tokens).unwrap();
-
         assert_eq!(program.statements.len(), 1);
     }
 
     #[test]
-
     fn test_parse_factorial() {
         let input = "
-
     def factorial(n):
-
         if n == 0:
-
             return 1
-
         return n * factorial(n - 1)
-
     ";
-
         let lexer = Lexer::new(input.trim());
-
         let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
-
         let (_, program) = parse_program(&tokens).unwrap();
-
         assert_eq!(program.statements.len(), 1);
     }
 
     #[test]
-
     fn test_parse_types() {
         let input = "let x: List[i32] = [1, 2, 3]";
-
         let lexer = Lexer::new(input);
-
         let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
-
         let (_, program) = parse_program(&tokens).unwrap();
-
         match &program.statements[0].kind {
             StatementKind::Let { ty, .. } => {
                 assert!(matches!(ty, Some(Type::Generic(name, _)) if name == "List"));
             }
-
             _ => panic!("Expected Let statement"),
         }
     }
 
     #[test]
-
     fn test_parse_borrows() {
         let input = "def foo(x: &i32, y: ~List[f32]) -> i32:\n    return 0";
-
         let lexer = Lexer::new(input);
-
         let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
-
         let (_, program) = parse_program(&tokens).unwrap();
-
         match &program.statements[0].kind {
             StatementKind::Def { params, .. } => {
                 assert!(matches!(params[0].ty, Some(Type::SharedRef(_))));
-
                 assert!(matches!(params[1].ty, Some(Type::UniqueRef(_))));
             }
-
             _ => panic!("Expected Def statement"),
         }
     }
@@ -1039,7 +1172,6 @@ mod tests {
         let lexer = Lexer::new(input);
         let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
         let (_, program) = parse_program(&tokens).unwrap();
-
         match &program.statements[0].kind {
             StatementKind::Import { path, alias } => {
                 assert_eq!(path, "utils/math.ds");
@@ -1055,7 +1187,6 @@ mod tests {
         let lexer = Lexer::new(input);
         let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
         let (_, program) = parse_program(&tokens).unwrap();
-
         match &program.statements[0].kind {
             StatementKind::Import { path, alias } => {
                 assert_eq!(path, "utils/math");
@@ -1071,7 +1202,6 @@ mod tests {
         let lexer = Lexer::new(input);
         let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
         let (_, program) = parse_program(&tokens).unwrap();
-
         match &program.statements[0].kind {
             StatementKind::Import { path, alias } => {
                 assert_eq!(path, "rust/std/collections/HashMap");
@@ -1087,7 +1217,6 @@ mod tests {
         let lexer = Lexer::new(input);
         let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
         let (_, program) = parse_program(&tokens).unwrap();
-
         match &program.statements[0].kind {
             StatementKind::FromImport { path, items } => {
                 assert_eq!(path, "rust/std/cmp");
@@ -1166,6 +1295,7 @@ mod tests {
             _ => panic!("Expected Let with Unwrap"),
         }
     }
+
     #[test]
     fn test_parse_pyimport() {
         let input = "pyimport:\n    import torch\n    import numpy as np";
@@ -1270,7 +1400,9 @@ mut w = 10
         let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
         let (_, program) = parse_program(&tokens).unwrap();
         match &program.statements[0].kind {
-            StatementKind::Let { name, .. } => assert_eq!(name, "ref"),
+            StatementKind::Let { pattern, .. } => {
+                assert_eq!(pattern.as_name(), Some("ref"));
+            }
             _ => panic!("Expected Let statement"),
         }
     }
@@ -1279,5 +1411,212 @@ mut w = 10
     fn test_parse_expression_text_supports_move_index() {
         let expr = parse_expression_text("move xs[0]").expect("expression should parse");
         assert!(matches!(expr, Expression::Move(_)));
+    }
+
+    #[test]
+    fn test_parse_tuple_literal() {
+        let input = "let t = (1, 2, 3)";
+        let lexer = Lexer::new(input);
+        let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
+        let (_, program) = parse_program(&tokens).unwrap();
+        match &program.statements[0].kind {
+            StatementKind::Let { value, .. } => {
+                assert!(matches!(value, Expression::Tuple(items) if items.len() == 3));
+            }
+            _ => panic!("Expected Let statement"),
+        }
+    }
+
+    #[test]
+    fn test_parse_empty_tuple() {
+        let input = "let t = ()";
+        let lexer = Lexer::new(input);
+        let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
+        let (_, program) = parse_program(&tokens).unwrap();
+        match &program.statements[0].kind {
+            StatementKind::Let { value, .. } => {
+                assert!(matches!(value, Expression::Tuple(items) if items.is_empty()));
+            }
+            _ => panic!("Expected Let statement"),
+        }
+    }
+
+    #[test]
+    fn test_parse_single_element_tuple() {
+        let input = "let t = (42,)";
+        let lexer = Lexer::new(input);
+        let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
+        let (_, program) = parse_program(&tokens).unwrap();
+        match &program.statements[0].kind {
+            StatementKind::Let { value, .. } => {
+                assert!(matches!(value, Expression::Tuple(items) if items.len() == 1));
+            }
+            _ => panic!("Expected Let statement"),
+        }
+    }
+
+    #[test]
+    fn test_parse_parenthesized_not_tuple() {
+        let input = "let x = (1 + 2)";
+        let lexer = Lexer::new(input);
+        let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
+        let (_, program) = parse_program(&tokens).unwrap();
+        match &program.statements[0].kind {
+            StatementKind::Let { value, .. } => {
+                assert!(matches!(value, Expression::BinaryOp(_, BinaryOp::Add, _)));
+            }
+            _ => panic!("Expected Let statement"),
+        }
+    }
+
+    #[test]
+    fn test_parse_range_expression() {
+        let input = "for i in 0..10:\n    $print(i)";
+        let lexer = Lexer::new(input);
+        let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
+        let (_, program) = parse_program(&tokens).unwrap();
+        match &program.statements[0].kind {
+            StatementKind::For { iterable, .. } => {
+                assert!(matches!(iterable, Expression::Range(_, _)));
+            }
+            _ => panic!("Expected For statement"),
+        }
+    }
+
+    #[test]
+    fn test_parse_range_inclusive_expression() {
+        let input = "for i in 0..=9:\n    $print(i)";
+        let lexer = Lexer::new(input);
+        let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
+        let (_, program) = parse_program(&tokens).unwrap();
+        match &program.statements[0].kind {
+            StatementKind::For { iterable, .. } => {
+                assert!(matches!(iterable, Expression::RangeInclusive(_, _)));
+            }
+            _ => panic!("Expected For statement"),
+        }
+    }
+
+    #[test]
+    fn test_parse_lambda_expression() {
+        let input = "let add = |x, y| x + y";
+        let lexer = Lexer::new(input);
+        let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
+        let (_, program) = parse_program(&tokens).unwrap();
+        match &program.statements[0].kind {
+            StatementKind::Let { value, .. } => {
+                assert!(matches!(value, Expression::Lambda { params, .. } if params.len() == 2));
+            }
+            _ => panic!("Expected Let statement"),
+        }
+    }
+
+    #[test]
+    fn test_parse_lambda_no_params() {
+        let input = "let f = || 42";
+        let lexer = Lexer::new(input);
+        let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
+        let (_, program) = parse_program(&tokens).unwrap();
+        match &program.statements[0].kind {
+            StatementKind::Let { value, .. } => {
+                assert!(matches!(value, Expression::Lambda { params, .. } if params.is_empty()));
+            }
+            _ => panic!("Expected Let statement"),
+        }
+    }
+
+    #[test]
+    fn test_parse_lambda_typed_params() {
+        let input = "let f = |x: i32, y: i32| x + y";
+        let lexer = Lexer::new(input);
+        let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
+        let (_, program) = parse_program(&tokens).unwrap();
+        match &program.statements[0].kind {
+            StatementKind::Let { value, .. } => match value {
+                Expression::Lambda { params, .. } => {
+                    assert_eq!(params.len(), 2);
+                    assert!(params[0].ty.is_some());
+                    assert!(params[1].ty.is_some());
+                }
+                _ => panic!("Expected Lambda"),
+            },
+            _ => panic!("Expected Let statement"),
+        }
+    }
+
+    #[test]
+    fn test_parse_let_tuple_destructure() {
+        let input = "let (a, b) = point";
+        let lexer = Lexer::new(input);
+        let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
+        let (_, program) = parse_program(&tokens).unwrap();
+        match &program.statements[0].kind {
+            StatementKind::Let { pattern, .. } => {
+                assert!(matches!(pattern, Pattern::Tuple(pats) if pats.len() == 2));
+            }
+            _ => panic!("Expected Let statement"),
+        }
+    }
+
+    #[test]
+    fn test_parse_for_tuple_destructure() {
+        let input = "for (k, v) in map:\n    $print(k)";
+        let lexer = Lexer::new(input);
+        let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
+        let (_, program) = parse_program(&tokens).unwrap();
+        match &program.statements[0].kind {
+            StatementKind::For { pattern, .. } => {
+                assert!(matches!(pattern, Pattern::Tuple(pats) if pats.len() == 2));
+            }
+            _ => panic!("Expected For statement"),
+        }
+    }
+
+    #[test]
+    fn test_parse_enum() {
+        let input = "enum Color:\n    Red\n    Green\n    Blue";
+        let lexer = Lexer::new(input);
+        let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
+        let (_, program) = parse_program(&tokens).unwrap();
+        match &program.statements[0].kind {
+            StatementKind::Enum { name, variants } => {
+                assert_eq!(name, "Color");
+                assert_eq!(variants.len(), 3);
+                assert!(variants[0].fields.is_empty());
+            }
+            _ => panic!("Expected Enum statement"),
+        }
+    }
+
+    #[test]
+    fn test_parse_enum_with_data() {
+        let input = "enum Shape:\n    Circle(f64)\n    Rectangle(f64, f64)\n    Point";
+        let lexer = Lexer::new(input);
+        let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
+        let (_, program) = parse_program(&tokens).unwrap();
+        match &program.statements[0].kind {
+            StatementKind::Enum { name, variants } => {
+                assert_eq!(name, "Shape");
+                assert_eq!(variants.len(), 3);
+                assert_eq!(variants[0].fields.len(), 1);
+                assert_eq!(variants[1].fields.len(), 2);
+                assert!(variants[2].fields.is_empty());
+            }
+            _ => panic!("Expected Enum statement"),
+        }
+    }
+
+    #[test]
+    fn test_parse_tuple_type() {
+        let input = "let p: (i32, i32) = (1, 2)";
+        let lexer = Lexer::new(input);
+        let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
+        let (_, program) = parse_program(&tokens).unwrap();
+        match &program.statements[0].kind {
+            StatementKind::Let { ty, .. } => {
+                assert!(matches!(ty, Some(Type::Tuple(types)) if types.len() == 2));
+            }
+            _ => panic!("Expected Let statement"),
+        }
     }
 }

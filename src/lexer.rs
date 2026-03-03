@@ -52,6 +52,8 @@ pub enum Token {
     As,
     #[token("from")]
     From,
+    #[token("enum")]
+    Enum,
 
     #[token(":")]
     Colon,
@@ -61,8 +63,14 @@ pub enum Token {
     Question,
     #[token("!!")]
     BangBang,
+    #[token("..=")]
+    DotDotEq,
+    #[token("..")]
+    DotDot,
     #[token(".")]
     Dot,
+    #[token("|")]
+    Pipe,
     #[token("[")]
     LBracket,
     #[token("]")]

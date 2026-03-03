@@ -1038,6 +1038,24 @@ fn validate_top_level_declarations(program: &crate::ast::Program) -> Result<(), 
                     }
                 }
             }
+            crate::ast::StatementKind::Enum { name, .. } => {
+                if let Some(previous) = declarations.insert(name.as_str(), "enum") {
+                    if previous != "enum" {
+                        return Err(SemanticError {
+                            offset: stmt.span.start,
+                            message: format!(
+                                "top-level name `{}` is already declared as {}",
+                                name, previous
+                            ),
+                        });
+                    } else {
+                        return Err(SemanticError {
+                            offset: stmt.span.start,
+                            message: format!("duplicate top-level enum `{}`", name),
+                        });
+                    }
+                }
+            }
             _ => {}
         }
     }
@@ -1062,12 +1080,14 @@ fn validate_statements(
     for stmt in statements {
         use crate::ast::StatementKind;
         match &stmt.kind {
-            StatementKind::Let { name, value, .. } => {
-                if current_scope_contains(scopes, name) {
-                    return Err(SemanticError {
-                        offset: stmt.span.start,
-                        message: format!("duplicate local binding `{}` in same scope", name),
-                    });
+            StatementKind::Let { pattern, value, .. } => {
+                for name in pattern.names() {
+                    if current_scope_contains(scopes, name) {
+                        return Err(SemanticError {
+                            offset: stmt.span.start,
+                            message: format!("duplicate local binding `{}` in same scope", name),
+                        });
+                    }
                 }
                 validate_expression(
                     value,
@@ -1076,22 +1096,26 @@ fn validate_statements(
                     semantic_index,
                     struct_fields,
                 )?;
-                declare_binding(
-                    scopes,
-                    name,
-                    BindingInfo {
-                        is_mut: false,
-                        can_write_through: expression_is_unique_ref(value),
-                        callable_arity: None,
-                    },
-                );
+                for name in pattern.names() {
+                    declare_binding(
+                        scopes,
+                        name,
+                        BindingInfo {
+                            is_mut: false,
+                            can_write_through: expression_is_unique_ref(value),
+                            callable_arity: None,
+                        },
+                    );
+                }
             }
-            StatementKind::Mut { name, value, .. } => {
-                if current_scope_contains(scopes, name) {
-                    return Err(SemanticError {
-                        offset: stmt.span.start,
-                        message: format!("duplicate local binding `{}` in same scope", name),
-                    });
+            StatementKind::Mut { pattern, value, .. } => {
+                for name in pattern.names() {
+                    if current_scope_contains(scopes, name) {
+                        return Err(SemanticError {
+                            offset: stmt.span.start,
+                            message: format!("duplicate local binding `{}` in same scope", name),
+                        });
+                    }
                 }
                 validate_expression(
                     value,
@@ -1100,15 +1124,17 @@ fn validate_statements(
                     semantic_index,
                     struct_fields,
                 )?;
-                declare_binding(
-                    scopes,
-                    name,
-                    BindingInfo {
-                        is_mut: true,
-                        can_write_through: true,
-                        callable_arity: None,
-                    },
-                );
+                for name in pattern.names() {
+                    declare_binding(
+                        scopes,
+                        name,
+                        BindingInfo {
+                            is_mut: true,
+                            can_write_through: true,
+                            callable_arity: None,
+                        },
+                    );
+                }
             }
             StatementKind::Def { params, body, .. } => {
                 let mut seen_params = HashSet::new();
@@ -1188,7 +1214,7 @@ fn validate_statements(
                 }
             }
             StatementKind::For {
-                var,
+                pattern,
                 iterable,
                 body,
             } => {
@@ -1200,15 +1226,17 @@ fn validate_statements(
                     struct_fields,
                 )?;
                 scopes.push(HashMap::new());
-                declare_binding(
-                    scopes,
-                    var,
-                    BindingInfo {
-                        is_mut: false,
-                        can_write_through: false,
-                        callable_arity: None,
-                    },
-                );
+                for name in pattern.names() {
+                    declare_binding(
+                        scopes,
+                        name,
+                        BindingInfo {
+                            is_mut: false,
+                            can_write_through: false,
+                            callable_arity: None,
+                        },
+                    );
+                }
                 validate_statements(
                     body,
                     scopes,
@@ -1444,6 +1472,20 @@ fn validate_statements(
                     }
                 }
             }
+            StatementKind::Enum { name, variants } => {
+                let mut seen_names = HashSet::new();
+                for variant in variants {
+                    if !seen_names.insert(variant.name.as_str()) {
+                        return Err(SemanticError {
+                            offset: stmt.span.start,
+                            message: format!(
+                                "duplicate variant `{}` in enum `{}`",
+                                variant.name, name
+                            ),
+                        });
+                    }
+                }
+            }
             StatementKind::PyImport(_) => {}
             StatementKind::Break => {
                 if loop_depth == 0 {
@@ -1544,6 +1586,32 @@ fn validate_expression(
         Expression::Index(inner, index) => {
             validate_expression(inner, offset, scopes, semantic_index, struct_fields)?;
             validate_expression(index, offset, scopes, semantic_index, struct_fields)
+        }
+        Expression::Tuple(items) => {
+            for item in items {
+                validate_expression(item, offset, scopes, semantic_index, struct_fields)?;
+            }
+            Ok(())
+        }
+        Expression::Range(start, end) | Expression::RangeInclusive(start, end) => {
+            validate_expression(start, offset, scopes, semantic_index, struct_fields)?;
+            validate_expression(end, offset, scopes, semantic_index, struct_fields)
+        }
+        Expression::Lambda { params, body } => {
+            let mut lambda_scopes: Vec<HashMap<String, BindingInfo>> = scopes.to_vec();
+            lambda_scopes.push(HashMap::new());
+            for p in params {
+                declare_binding(
+                    &mut lambda_scopes,
+                    &p.name,
+                    BindingInfo {
+                        is_mut: p.is_mut,
+                        can_write_through: p.is_mut,
+                        callable_arity: None,
+                    },
+                );
+            }
+            validate_expression(body, offset, &lambda_scopes, semantic_index, struct_fields)
         }
         Expression::Ident(name) => {
             if is_resolvable_ident(name, scopes, semantic_index) {
@@ -2201,9 +2269,19 @@ fn collect_pattern_bindings_inner(
         | crate::ast::Expression::Unwrap(inner) => {
             collect_pattern_bindings_inner(inner, scopes, semantic_index, bindings);
         }
-        crate::ast::Expression::Index(inner, index) => {
+        crate::ast::Expression::Index(inner, index)
+        | crate::ast::Expression::Range(inner, index)
+        | crate::ast::Expression::RangeInclusive(inner, index) => {
             collect_pattern_bindings_inner(inner, scopes, semantic_index, bindings);
             collect_pattern_bindings_inner(index, scopes, semantic_index, bindings);
+        }
+        crate::ast::Expression::Tuple(items) => {
+            for item in items {
+                collect_pattern_bindings_inner(item, scopes, semantic_index, bindings);
+            }
+        }
+        crate::ast::Expression::Lambda { body, .. } => {
+            collect_pattern_bindings_inner(body, scopes, semantic_index, bindings);
         }
         crate::ast::Expression::Literal(_) => {}
     }
@@ -2245,7 +2323,8 @@ fn collect_semantic_index(program: &crate::ast::Program) -> SemanticIndex {
     let mut index = SemanticIndex::default();
     for stmt in &program.statements {
         match &stmt.kind {
-            crate::ast::StatementKind::Struct { name, .. } => {
+            crate::ast::StatementKind::Struct { name, .. }
+            | crate::ast::StatementKind::Enum { name, .. } => {
                 index.struct_names.insert(name.clone());
             }
             crate::ast::StatementKind::Protocol { name, methods } => {

@@ -6,10 +6,15 @@ The design priority is explicit semantics with predictable lowering. Syntax that
 
 ## Current Language Surface
 
-- Blocks: `if`/`elif`/`else`, `for`, `while`, `def`, `struct`, `protocol`, `impl`, `match`
+- Blocks: `if`/`elif`/`else`, `for`, `while`, `def`, `struct`, `protocol`, `impl`, `match`, `enum`
 - Imports: `import "relative/path.ds"`, `import dotted.module`, and `from ... import ...` for local modules (resolved relative to the importing file, `.ds` default extension), plus Rust `use` passthrough via `import rust.std.cmp.max`, `import rust.std.collections.HashMap as Map`, `from rust.std.cmp import max as maximum, min`, or `import "rust:std::cmp::max"` (`std`/`core`/`alloc` roots)
   - `from ... import ...` now rejects duplicate imported items and duplicate introduced local names within a single statement
-- Bindings: `let` and `mut`
+- Bindings: `let` and `mut` (with destructuring patterns: `let (x, y) = expr`, `for (k, v) in map`)
+- Tuples: `(a, b)` literals, `(i32, Str)` types
+- Ranges: `0..10` (exclusive), `0..=10` (inclusive)
+- Lambdas: `|x| x * 2`, `|a: i32, b: i32| a + b`, `|| expr`
+- Enums: `enum Color: Red, Green, Blue` with data variants `Circle(f64)`
+- Dict type: `Dict[K, V]` lowers to `HashMap<K, V>` with automatic import
 - Ownership and borrows:
   - `move place` lowers to `std::mem::take(&mut place)`
   - `&expr` shared borrow
@@ -26,6 +31,7 @@ The design priority is explicit semantics with predictable lowering. Syntax that
   - matrix operator: `@` lowering via generated `desert_matmul(...)` helpers
   - indexing: `expr[index]`
   - error operators: `?`, `!!`
+- Postfix expressions (`.method()`, `[i]`, `()`, `?`, `!!`) apply to any primary expression (identifiers, parenthesized expressions, tuple literals, etc.)
 - Macros: `$name(...)` (`$print(...)` maps to `println!`)
   - In `$print` string interpolation, literal `{}` segments are preserved as literal braces; non-empty `{expr}` segments are lowered as debug placeholders
 - Generics:

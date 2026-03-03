@@ -140,6 +140,21 @@ fn check_control_flow_logic_example() {
 }
 
 #[test]
+fn check_tuples_and_ranges_example() {
+    run_check("tuples_and_ranges.ds");
+}
+
+#[test]
+fn check_lambdas_example() {
+    run_check("lambdas.ds");
+}
+
+#[test]
+fn check_enums_example() {
+    run_check("enums.ds");
+}
+
+#[test]
 fn check_reports_translated_diagnostics_for_type_mismatch_fixture() {
     let mut cmd = cargo_bin_cmd!("desert");
     cmd.arg("check")
@@ -845,6 +860,30 @@ fn transpile_fixture_control_flow_logic_matches_expected() {
     assert_transpile_matches_fixture(
         "tests/fixtures/transpile_ok_control_flow_logic.ds",
         "tests/fixtures/transpile_ok_control_flow_logic.rs",
+    );
+}
+
+#[test]
+fn transpile_fixture_tuples_ranges_matches_expected() {
+    assert_transpile_matches_fixture(
+        "tests/fixtures/transpile_ok_tuples_ranges.ds",
+        "tests/fixtures/transpile_ok_tuples_ranges.rs",
+    );
+}
+
+#[test]
+fn transpile_fixture_lambdas_matches_expected() {
+    assert_transpile_matches_fixture(
+        "tests/fixtures/transpile_ok_lambdas.ds",
+        "tests/fixtures/transpile_ok_lambdas.rs",
+    );
+}
+
+#[test]
+fn transpile_fixture_enums_matches_expected() {
+    assert_transpile_matches_fixture(
+        "tests/fixtures/transpile_ok_enums.ds",
+        "tests/fixtures/transpile_ok_enums.rs",
     );
 }
 

@@ -4,6 +4,7 @@ use std::ops::Range;
 pub enum Type {
     Simple(String),
     Generic(String, Vec<Type>),
+    Tuple(Vec<Type>),
     SharedRef(Box<Type>), // &
     UniqueRef(Box<Type>), // ~
 }
@@ -51,6 +52,48 @@ pub enum Expression {
     Question(Box<Expression>),               // ?
     Unwrap(Box<Expression>),                 // !!
     Index(Box<Expression>, Box<Expression>), // expr[index]
+    Tuple(Vec<Expression>),                  // (a, b, c)
+    Range(Box<Expression>, Box<Expression>), // a..b
+    RangeInclusive(Box<Expression>, Box<Expression>), // a..=b
+    Lambda {
+        params: Vec<Param>,
+        body: Box<Expression>,
+    },
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub enum Pattern {
+    Name(String),
+    Tuple(Vec<Pattern>),
+}
+
+impl Pattern {
+    pub fn as_name(&self) -> Option<&str> {
+        match self {
+            Pattern::Name(name) => Some(name),
+            _ => None,
+        }
+    }
+
+    pub fn names(&self) -> Vec<&str> {
+        match self {
+            Pattern::Name(name) => vec![name.as_str()],
+            Pattern::Tuple(pats) => pats.iter().flat_map(|p| p.names()).collect(),
+        }
+    }
+
+    pub fn format_desert(&self) -> String {
+        match self {
+            Pattern::Name(name) => name.clone(),
+            Pattern::Tuple(pats) => format!(
+                "({})",
+                pats.iter()
+                    .map(|p| p.format_desert())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -73,6 +116,12 @@ pub struct ImportItem {
 }
 
 #[derive(Debug, PartialEq, Clone)]
+pub struct EnumVariant {
+    pub name: String,
+    pub fields: Vec<Type>,
+}
+
+#[derive(Debug, PartialEq, Clone)]
 pub enum StatementKind {
     Import {
         path: String,
@@ -83,12 +132,12 @@ pub enum StatementKind {
         items: Vec<ImportItem>,
     },
     Let {
-        name: String,
+        pattern: Pattern,
         ty: Option<Type>,
         value: Expression,
     },
     Mut {
-        name: String,
+        pattern: Pattern,
         ty: Option<Type>,
         value: Expression,
     },
@@ -104,7 +153,7 @@ pub enum StatementKind {
         else_block: Option<Vec<Statement>>,
     },
     For {
-        var: String,
+        pattern: Pattern,
         iterable: Expression,
         body: Vec<Statement>,
     },
@@ -116,9 +165,13 @@ pub enum StatementKind {
         name: String,
         fields: Vec<Param>,
     },
+    Enum {
+        name: String,
+        variants: Vec<EnumVariant>,
+    },
     Protocol {
         name: String,
-        methods: Vec<Statement>, // These will likely be Def with empty bodies or signatures
+        methods: Vec<Statement>,
     },
     Impl {
         protocol: Option<String>,
@@ -129,7 +182,7 @@ pub enum StatementKind {
         expression: Expression,
         arms: Vec<(Expression, Vec<Statement>)>, // (pattern, body)
     },
-    PyImport(String), // The whole block as a string for now
+    PyImport(String),
     Return(Option<Expression>),
     Break,
     Continue,

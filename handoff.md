@@ -24,16 +24,21 @@ Core quality checks currently pass:
 
 ## Implemented Language Surface
 
-- Declarations: `let`, `mut`
-- Control flow: `if/else`, `for`, `match`
+- Declarations: `let`, `mut` (with destructuring patterns: `let (x, y) = expr`)
 - Control flow: `if`/`elif`/`else`, `for`, `while`, `match`, `break`, `continue`
-- Definitions: `def`, `struct`, `protocol`, `impl`
-- Expressions: literals, calls, member access, generic calls, indexing, assignment
+- Definitions: `def`, `struct`, `protocol`, `impl`, `enum`
+- Expressions: literals, calls, member access, generic calls, indexing, assignment, tuples, ranges, lambdas
+- Tuples: `(a, b)` literals, `(i32, Str)` types, destructuring in `let`/`mut`/`for`
+- Ranges: `0..10` (exclusive) and `0..=10` (inclusive)
+- Lambdas: `|x| x * 2`, `|a: i32, b: i32| a + b`, `|| expr`
+- Enums: `enum Color: Red, Green, Blue` with data variants `Circle(f64)`
+- Dict type mapping: `Dict[K, V]` lowers to `HashMap<K, V>` with auto-import
 - Imports: top-level `import` statements for both single-file and project inputs
-- Rust use passthrough imports: `import rust.std...` and `import "rust:std::..."` lower to `use ...;` (currently `std`/`core`/`alloc`)
+- Rust use passthrough imports: `import rust.std...` and `import "rust:std::..."` lower to `use ...;` (currently `std`/`core`/`alloc`); imported uppercase names register as types for `::` lowering
 - Ownership/error syntax: `move`, `&`, `~`, `?`, `!!`
 - Logic/modulo syntax: `and`, `or`, `not`, `%`
 - Macros: `$name(...)` with `$print` -> `println!`
+- Postfix expressions (`.method()`, `[i]`, `()`, `?`, `!!`) now apply to any primary expression, not just identifiers
 - `pyimport` blocks: parsed and emitted as Rust comments
 
 ## Implemented Project Surface
@@ -102,6 +107,14 @@ Core quality checks currently pass:
 - Added parser/transpiler support for `while` loops and loop-control statements (`break`, `continue`), plus semantic validation that `break`/`continue` are loop-only.
 - Added parser/transpiler support for logical operators (`and`, `or`, `not`) and modulo (`%`) with Rust lowering (`&&`, `||`, `!`, `%`).
 - Added `elif` parsing as nested conditional lowering for multi-branch `if` chains.
+- Added tuple literals `(a, b)`, tuple types `(i32, Str)`, and destructuring pattern support (`let (x, y) = expr`, `for (k, v) in map`) throughout AST/parser/transpiler/formatter/semantic validation.
+- Added range expressions `0..10` and `0..=10` with Rust lowering.
+- Added lambda expressions `|x| x * 2` and `|| expr` with parameter type annotations and semantic validation of lambda body scopes.
+- Added `enum` declarations with simple and data-carrying variants (`enum Color: Red, Green(f64)`) with Rust lowering and semantic duplicate-variant validation.
+- Added `Dict[K, V]` type mapping to `HashMap<K, V>` with automatic `use std::collections::HashMap;` insertion.
+- Refactored parser to extract postfix expression loop (`postfix_expression`) from `primary_expression`, enabling method calls, indexing, and calls on any expression (not just identifiers), fixing `(expr).method()` patterns.
+- Registered imported uppercase names (from `import rust.std...` and `from ... import ...`) as type symbols in the resolver, enabling `HashMap.new()` to lower to `HashMap::new()`.
+- Added semantic validation for lambda parameter scoping: lambda body expressions now validate with params in scope.
 
 ## Known Gaps
 

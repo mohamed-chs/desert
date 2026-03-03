@@ -32,20 +32,28 @@ fn format_statement(stmt: &Statement, indent: usize, out: &mut String) {
                 indent_str, path, rendered_items
             ));
         }
-        StatementKind::Let { name, ty, value } => {
+        StatementKind::Let {
+            pattern,
+            ty,
+            value,
+        } => {
             out.push_str(&format!(
                 "{}let {}{} = {}\n",
                 indent_str,
-                name,
+                format_pattern(pattern),
                 format_type_suffix(ty.as_ref()),
                 format_expression(value, 0)
             ));
         }
-        StatementKind::Mut { name, ty, value } => {
+        StatementKind::Mut {
+            pattern,
+            ty,
+            value,
+        } => {
             out.push_str(&format!(
                 "{}mut {}{} = {}\n",
                 indent_str,
-                name,
+                format_pattern(pattern),
                 format_type_suffix(ty.as_ref()),
                 format_expression(value, 0)
             ));
@@ -88,14 +96,14 @@ fn format_statement(stmt: &Statement, indent: usize, out: &mut String) {
             }
         }
         StatementKind::For {
-            var,
+            pattern,
             iterable,
             body,
         } => {
             out.push_str(&format!(
                 "{}for {} in {}:\n",
                 indent_str,
-                var,
+                format_pattern(pattern),
                 format_expression(iterable, 0)
             ));
             format_block(body, indent + 1, out);
@@ -122,6 +130,23 @@ fn format_statement(stmt: &Statement, indent: usize, out: &mut String) {
                     field.name,
                     ty
                 ));
+            }
+        }
+        StatementKind::Enum { name, variants } => {
+            out.push_str(&format!("{}enum {}:\n", indent_str, name));
+            for variant in variants {
+                if variant.fields.is_empty() {
+                    out.push_str(&format!("{}{}\n", "    ".repeat(indent + 1), variant.name));
+                } else {
+                    let types_str: Vec<String> =
+                        variant.fields.iter().map(format_type).collect();
+                    out.push_str(&format!(
+                        "{}{}({})\n",
+                        "    ".repeat(indent + 1),
+                        variant.name,
+                        types_str.join(", ")
+                    ));
+                }
             }
         }
         StatementKind::Protocol { name, methods } => {
@@ -191,6 +216,10 @@ fn format_block(stmts: &[Statement], indent: usize, out: &mut String) {
     }
 }
 
+fn format_pattern(pattern: &Pattern) -> String {
+    pattern.format_desert()
+}
+
 fn format_param(param: &Param) -> String {
     let mut out = String::new();
     if param.is_mut {
@@ -216,6 +245,14 @@ fn format_type(ty: &Type) -> String {
             "{}[{}]",
             name,
             args.iter().map(format_type).collect::<Vec<_>>().join(", ")
+        ),
+        Type::Tuple(types) => format!(
+            "({})",
+            types
+                .iter()
+                .map(format_type)
+                .collect::<Vec<_>>()
+                .join(", ")
         ),
         Type::SharedRef(inner) => format!("&{}", format_type(inner)),
         Type::UniqueRef(inner) => format!("~{}", format_type(inner)),
@@ -289,6 +326,38 @@ fn format_expression(expr: &Expression, parent_prec: u8) -> String {
             format_expression(target, prec),
             format_expression(index, 0)
         ),
+        Expression::Tuple(items) => {
+            if items.len() == 1 {
+                format!("({},)", format_expression(&items[0], 0))
+            } else {
+                format!(
+                    "({})",
+                    items
+                        .iter()
+                        .map(|i| format_expression(i, 0))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+            }
+        }
+        Expression::Range(start, end) => format!(
+            "{}..{}",
+            format_expression(start, prec),
+            format_expression(end, prec)
+        ),
+        Expression::RangeInclusive(start, end) => format!(
+            "{}..={}",
+            format_expression(start, prec),
+            format_expression(end, prec)
+        ),
+        Expression::Lambda { params, body } => {
+            let params_str = params
+                .iter()
+                .map(format_param)
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("|{}| {}", params_str, format_expression(body, 0))
+        }
     };
 
     if prec < parent_prec {
@@ -312,6 +381,8 @@ fn expression_precedence(expr: &Expression) -> u8 {
             BinaryOp::Add | BinaryOp::Sub => 5,
             BinaryOp::Mul | BinaryOp::Div | BinaryOp::Mod | BinaryOp::MatMul => 6,
         },
+        Expression::Range(_, _) | Expression::RangeInclusive(_, _) => 2,
+        Expression::Lambda { .. } => 1,
         Expression::Move(_)
         | Expression::SharedRef(_)
         | Expression::UniqueRef(_)
@@ -322,7 +393,10 @@ fn expression_precedence(expr: &Expression) -> u8 {
         | Expression::Question(_)
         | Expression::Unwrap(_)
         | Expression::Index(_, _) => 8,
-        Expression::Literal(_) | Expression::Ident(_) | Expression::MacroCall(_, _) => 9,
+        Expression::Literal(_)
+        | Expression::Ident(_)
+        | Expression::MacroCall(_, _)
+        | Expression::Tuple(_) => 9,
     }
 }
 
