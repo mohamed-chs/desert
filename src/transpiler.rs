@@ -695,11 +695,7 @@ impl Transpiler {
     ) -> String {
         let indent_str = "    ".repeat(indent);
         match &stmt.kind {
-            StatementKind::Let {
-                pattern,
-                ty,
-                value,
-            } => {
+            StatementKind::Let { pattern, ty, value } => {
                 let ty_str = if let Some(t) = ty {
                     format!(": {}", self.transpile_type(t))
                 } else {
@@ -713,11 +709,7 @@ impl Transpiler {
                     self.transpile_expression(value, struct_fields, resolver)
                 )
             }
-            StatementKind::Mut {
-                pattern,
-                ty,
-                value,
-            } => {
+            StatementKind::Mut { pattern, ty, value } => {
                 let ty_str = if let Some(t) = ty {
                     format!(": {}", self.transpile_type(t))
                 } else {
@@ -1179,7 +1171,11 @@ impl Transpiler {
                     let imported_name = alias
                         .as_deref()
                         .unwrap_or_else(|| path.rsplit('/').next().unwrap_or(path));
-                    if imported_name.chars().next().map_or(false, |c| c.is_uppercase()) {
+                    if imported_name
+                        .chars()
+                        .next()
+                        .map_or(false, |c| c.is_uppercase())
+                    {
                         resolver.declare_type(imported_name);
                     }
                 }
@@ -1320,8 +1316,7 @@ impl Transpiler {
                 format!("{}<{}>", name, inner_str.join(", "))
             }
             Type::Tuple(types) => {
-                let inner_str: Vec<String> =
-                    types.iter().map(|t| self.transpile_type(t)).collect();
+                let inner_str: Vec<String> = types.iter().map(|t| self.transpile_type(t)).collect();
                 format!("({})", inner_str.join(", "))
             }
             Type::SharedRef(inner) => format!("&{}", self.transpile_type(inner)),
@@ -2034,8 +2029,7 @@ mod tests {
 
     #[test]
     fn test_transpile_match_option_arms_do_not_add_fallback() {
-        let input =
-            "def main():\n    let maybe = Some(1)\n    match maybe:\n        Some(v):\n            $print(v)\n        None:\n            $print(\"none\")";
+        let input = "def main():\n    let maybe = Some(1)\n    match maybe:\n        Some(v):\n            $print(v)\n        None:\n            $print(\"none\")";
         let lexer = Lexer::new(input);
         let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
         let (_, program) = parse_program(&tokens).unwrap();
@@ -2048,8 +2042,7 @@ mod tests {
 
     #[test]
     fn test_transpile_match_bool_arms_do_not_add_fallback() {
-        let input =
-            "def main():\n    let flag = true\n    match flag:\n        true:\n            $print(\"yes\")\n        false:\n            $print(\"no\")";
+        let input = "def main():\n    let flag = true\n    match flag:\n        true:\n            $print(\"yes\")\n        false:\n            $print(\"no\")";
         let lexer = Lexer::new(input);
         let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
         let (_, program) = parse_program(&tokens).unwrap();
@@ -2062,8 +2055,7 @@ mod tests {
 
     #[test]
     fn test_transpile_match_result_arms_do_not_add_fallback() {
-        let input =
-            "def main():\n    let result = Ok(1)\n    match result:\n        Ok(v):\n            $print(v)\n        Err(e):\n            $print(e)";
+        let input = "def main():\n    let result = Ok(1)\n    match result:\n        Ok(v):\n            $print(v)\n        Err(e):\n            $print(e)";
         let lexer = Lexer::new(input);
         let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
         let (_, program) = parse_program(&tokens).unwrap();

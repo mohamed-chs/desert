@@ -113,10 +113,7 @@ fn parse_pattern(input: &[TokenSpan]) -> ParseResult<'_, Pattern> {
     Ok((rest, Pattern::Name(name)))
 }
 
-fn postfix_expression<'a>(
-    input: &'a [TokenSpan],
-    base: Expression,
-) -> ParseResult<'a, Expression> {
+fn postfix_expression<'a>(input: &'a [TokenSpan], base: Expression) -> ParseResult<'a, Expression> {
     let mut current_input = input;
     let mut expr = base;
     loop {

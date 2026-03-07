@@ -32,11 +32,7 @@ fn format_statement(stmt: &Statement, indent: usize, out: &mut String) {
                 indent_str, path, rendered_items
             ));
         }
-        StatementKind::Let {
-            pattern,
-            ty,
-            value,
-        } => {
+        StatementKind::Let { pattern, ty, value } => {
             out.push_str(&format!(
                 "{}let {}{} = {}\n",
                 indent_str,
@@ -45,11 +41,7 @@ fn format_statement(stmt: &Statement, indent: usize, out: &mut String) {
                 format_expression(value, 0)
             ));
         }
-        StatementKind::Mut {
-            pattern,
-            ty,
-            value,
-        } => {
+        StatementKind::Mut { pattern, ty, value } => {
             out.push_str(&format!(
                 "{}mut {}{} = {}\n",
                 indent_str,
@@ -138,8 +130,7 @@ fn format_statement(stmt: &Statement, indent: usize, out: &mut String) {
                 if variant.fields.is_empty() {
                     out.push_str(&format!("{}{}\n", "    ".repeat(indent + 1), variant.name));
                 } else {
-                    let types_str: Vec<String> =
-                        variant.fields.iter().map(format_type).collect();
+                    let types_str: Vec<String> = variant.fields.iter().map(format_type).collect();
                     out.push_str(&format!(
                         "{}{}({})\n",
                         "    ".repeat(indent + 1),
@@ -248,11 +239,7 @@ fn format_type(ty: &Type) -> String {
         ),
         Type::Tuple(types) => format!(
             "({})",
-            types
-                .iter()
-                .map(format_type)
-                .collect::<Vec<_>>()
-                .join(", ")
+            types.iter().map(format_type).collect::<Vec<_>>().join(", ")
         ),
         Type::SharedRef(inner) => format!("&{}", format_type(inner)),
         Type::UniqueRef(inner) => format!("~{}", format_type(inner)),

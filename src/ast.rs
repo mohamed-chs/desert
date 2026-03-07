@@ -49,11 +49,11 @@ pub enum Expression {
     SharedRef(Box<Expression>),
     UniqueRef(Box<Expression>),
     Not(Box<Expression>),
-    Question(Box<Expression>),               // ?
-    Unwrap(Box<Expression>),                 // !!
-    Index(Box<Expression>, Box<Expression>), // expr[index]
-    Tuple(Vec<Expression>),                  // (a, b, c)
-    Range(Box<Expression>, Box<Expression>), // a..b
+    Question(Box<Expression>),                        // ?
+    Unwrap(Box<Expression>),                          // !!
+    Index(Box<Expression>, Box<Expression>),          // expr[index]
+    Tuple(Vec<Expression>),                           // (a, b, c)
+    Range(Box<Expression>, Box<Expression>),          // a..b
     RangeInclusive(Box<Expression>, Box<Expression>), // a..=b
     Lambda {
         params: Vec<Param>,
