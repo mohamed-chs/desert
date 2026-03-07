@@ -1,0 +1,12 @@
+def main():
+    # Dictionary Literal
+    let a = {"hello": 1, "world": 2}
+    $print(a)
+
+    # Empty Dictionary Literal
+    let b: Dict[Str, i32] = {}
+    $print(b)
+    
+    # Set Literal
+    let c = {"apple", "banana"}
+    $print(c)

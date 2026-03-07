@@ -83,16 +83,25 @@ impl Transpiler {
         let rust_uses = self.collect_rust_uses(program);
         let uses_matmul = self.program_uses_matmul(program);
         let uses_dict = self.program_uses_dict(program);
+        let uses_set = self.program_uses_set(program);
         let mut resolver = Resolver::new();
         self.seed_resolver_types(program, &mut resolver);
 
         let mut all_uses: Vec<String> = rust_uses;
         if uses_dict && !all_uses.iter().any(|u| u.contains("HashMap")) {
             all_uses.push("std::collections::HashMap".to_string());
-            all_uses.sort();
         }
+        if uses_set && !all_uses.iter().any(|u| u.contains("HashSet")) {
+            all_uses.push("std::collections::HashSet".to_string());
+        }
+        all_uses.sort();
 
         for rust_use in &all_uses {
+            if rust_use == "std::collections::HashMap" || rust_use == "std::collections::HashSet" {
+                output.push_str("#[allow(unused_imports)]\n");
+                source_map.add_mapping(current_line, generated_location());
+                current_line += 1;
+            }
             output.push_str(&format!("use {};\n", rust_use));
             source_map.add_mapping(current_line, generated_location());
             current_line += 1;
@@ -812,6 +821,26 @@ impl Transpiler {
                     .collect();
                 format!("vec![{}]", items_str.join(", "))
             }
+            Expression::Literal(Literal::Dict(pairs)) => {
+                let pairs_str: Vec<String> = pairs
+                    .iter()
+                    .map(|(k, v)| {
+                        format!(
+                            "({}, {})",
+                            self.transpile_expression(k, struct_fields, resolver),
+                            self.transpile_expression(v, struct_fields, resolver)
+                        )
+                    })
+                    .collect();
+                format!("std::collections::HashMap::from([{}])", pairs_str.join(", "))
+            }
+            Expression::Literal(Literal::Set(items)) => {
+                let items_str: Vec<String> = items
+                    .iter()
+                    .map(|i| self.transpile_expression(i, struct_fields, resolver))
+                    .collect();
+                format!("std::collections::HashSet::from([{}])", items_str.join(", "))
+            }
             Expression::Ident(name) => match name.as_str() {
                 "Dict" => "HashMap".to_string(),
                 _ => name.clone(),
@@ -1433,8 +1462,11 @@ impl Transpiler {
             | Expression::RangeInclusive(expr, idx) => {
                 self.expression_uses_matmul(expr) || self.expression_uses_matmul(idx)
             }
-            Expression::Tuple(items) | Expression::Literal(Literal::List(items)) => {
+            Expression::Tuple(items) | Expression::Literal(Literal::List(items)) | Expression::Literal(Literal::Set(items)) => {
                 items.iter().any(|item| self.expression_uses_matmul(item))
+            }
+            Expression::Literal(Literal::Dict(pairs)) => {
+                pairs.iter().any(|(k, v)| self.expression_uses_matmul(k) || self.expression_uses_matmul(v))
             }
             Expression::Lambda { body, .. } => self.expression_uses_matmul(body),
             Expression::Literal(_) | Expression::Ident(_) => false,
@@ -1507,6 +1539,75 @@ impl Transpiler {
             }
             Type::Tuple(types) => types.iter().any(|t| self.type_uses_dict(t)),
             Type::SharedRef(inner) | Type::UniqueRef(inner) => self.type_uses_dict(inner),
+        }
+    }
+
+    fn program_uses_set(&self, program: &Program) -> bool {
+        program
+            .statements
+            .iter()
+            .any(|s| self.statement_uses_set(s))
+    }
+
+    fn statement_uses_set(&self, statement: &Statement) -> bool {
+        match &statement.kind {
+            StatementKind::Let { ty, value, .. } | StatementKind::Mut { ty, value, .. } => {
+                ty.as_ref().is_some_and(|t| self.type_uses_set(t))
+                    || self.expression_uses_set(value)
+            }
+            StatementKind::Def {
+                params,
+                return_ty,
+                body,
+                ..
+            } => {
+                params
+                    .iter()
+                    .any(|p| p.ty.as_ref().is_some_and(|t| self.type_uses_set(t)))
+                    || return_ty.as_ref().is_some_and(|t| self.type_uses_set(t))
+                    || body.iter().any(|s| self.statement_uses_set(s))
+            }
+            StatementKind::Struct { fields, .. } => fields
+                .iter()
+                .any(|f| f.ty.as_ref().is_some_and(|t| self.type_uses_set(t))),
+            StatementKind::Enum { variants, .. } => variants
+                .iter()
+                .any(|v| v.fields.iter().any(|t| self.type_uses_set(t))),
+            StatementKind::If {
+                then_block,
+                else_block,
+                ..
+            } => {
+                then_block.iter().any(|s| self.statement_uses_set(s))
+                    || else_block
+                        .as_ref()
+                        .is_some_and(|b| b.iter().any(|s| self.statement_uses_set(s)))
+            }
+            StatementKind::For { body, .. } | StatementKind::While { body, .. } => {
+                body.iter().any(|s| self.statement_uses_set(s))
+            }
+            StatementKind::Protocol { methods, .. } | StatementKind::Impl { methods, .. } => {
+                methods.iter().any(|s| self.statement_uses_set(s))
+            }
+            StatementKind::Match { arms, .. } => arms
+                .iter()
+                .any(|(_, body)| body.iter().any(|s| self.statement_uses_set(s))),
+            _ => false,
+        }
+    }
+
+    fn expression_uses_set(&self, expr: &Expression) -> bool {
+        matches!(expr, Expression::Literal(Literal::Set(_)))
+    }
+
+    fn type_uses_set(&self, ty: &Type) -> bool {
+        match ty {
+            Type::Simple(name) => name == "Set",
+            Type::Generic(name, inner) => {
+                name == "Set" || inner.iter().any(|t| self.type_uses_set(t))
+            }
+            Type::Tuple(types) => types.iter().any(|t| self.type_uses_set(t)),
+            Type::SharedRef(inner) | Type::UniqueRef(inner) => self.type_uses_set(inner),
         }
     }
 

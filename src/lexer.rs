@@ -79,6 +79,10 @@ pub enum Token {
     LParen,
     #[token(")")]
     RParen,
+    #[token("{")]
+    LBrace,
+    #[token("}")]
+    RBrace,
     #[token(",")]
     Comma,
     #[token("=")]

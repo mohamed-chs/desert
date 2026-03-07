@@ -267,6 +267,22 @@ fn format_expression(expr: &Expression, parent_prec: u8) -> String {
                 .collect::<Vec<_>>()
                 .join(", ")
         ),
+        Expression::Literal(Literal::Dict(pairs)) => format!(
+            "{{{}}}",
+            pairs
+                .iter()
+                .map(|(k, v)| format!("{}: {}", format_expression(k, 0), format_expression(v, 0)))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
+        Expression::Literal(Literal::Set(items)) => format!(
+            "{{{}}}",
+            items
+                .iter()
+                .map(|item| format_expression(item, 0))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
         Expression::Ident(name) => name.clone(),
         Expression::BinaryOp(left, op, right) => format!(
             "{} {} {}",

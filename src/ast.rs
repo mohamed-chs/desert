@@ -15,6 +15,8 @@ pub enum Literal {
     Float(f64),
     String(String),
     List(Vec<Expression>), // [1, 2, 3]
+    Dict(Vec<(Expression, Expression)>), // {"a": 1, "b": 2}
+    Set(Vec<Expression>), // {1, 2, 3}
 }
 
 #[derive(Debug, PartialEq, Clone)]

@@ -215,6 +215,79 @@ fn postfix_expression<'a>(input: &'a [TokenSpan], base: Expression) -> ParseResu
     Ok((current_input, expr))
 }
 
+fn dict_or_set_literal(input: &[TokenSpan]) -> ParseResult<'_, Expression> {
+    let (mut current_input, _) = token(Token::LBrace)(input)?;
+    
+    // Empty `{}` is an empty Dict
+    if let Ok((rest, _)) = token(Token::RBrace)(current_input) {
+        return Ok((rest, Expression::Literal(Literal::Dict(Vec::new()))));
+    }
+
+    let mut has_indent = false;
+    if let Ok((next_input, _)) = token(Token::Indent)(current_input) {
+        current_input = next_input;
+        has_indent = true;
+    }
+
+    let (mut current_input, first_expr) = expression(current_input)?;
+
+    // If there's a colon, it's a Dict (k: v)
+    if let Ok((mut next_input, _)) = token(Token::Colon)(current_input) {
+        let (mut next_input, first_val) = expression(next_input)?;
+        let mut pairs = vec![(first_expr, first_val)];
+
+        while let Ok((comma_next, _)) = token(Token::Comma)(next_input) {
+            next_input = comma_next;
+            // Check for trailing comma + RBrace (or Dedent + RBrace) gracefully
+            if token(Token::RBrace)(next_input).is_ok() {
+                break;
+            }
+            if has_indent && token(Token::Dedent)(next_input).is_ok() && token(Token::RBrace)(token(Token::Dedent)(next_input).unwrap().0).is_ok() {
+                break;
+            }
+
+            let (k_next, k) = expression(next_input)?;
+            let (colon_next, _) = token(Token::Colon)(k_next)?;
+            let (v_next, v) = expression(colon_next)?;
+            pairs.push((k, v));
+            next_input = v_next;
+        }
+
+        if has_indent {
+            let (dedent_next, _) = token(Token::Dedent)(next_input)?;
+            next_input = dedent_next;
+        }
+
+        let (final_input, _) = token(Token::RBrace)(next_input)?;
+        return Ok((final_input, Expression::Literal(Literal::Dict(pairs))));
+    } else {
+        // It's a Set
+        let mut items = vec![first_expr];
+
+        while let Ok((comma_next, _)) = token(Token::Comma)(current_input) {
+            current_input = comma_next;
+            if token(Token::RBrace)(current_input).is_ok() {
+                break;
+            }
+            if has_indent && token(Token::Dedent)(current_input).is_ok() && token(Token::RBrace)(token(Token::Dedent)(current_input).unwrap().0).is_ok() {
+                break;
+            }
+
+            let (val_next, val) = expression(current_input)?;
+            items.push(val);
+            current_input = val_next;
+        }
+
+        if has_indent {
+            let (dedent_next, _) = token(Token::Dedent)(current_input)?;
+            current_input = dedent_next;
+        }
+
+        let (final_input, _) = token(Token::RBrace)(current_input)?;
+        return Ok((final_input, Expression::Literal(Literal::Set(items))));
+    }
+}
+
 fn primary_expression(input: &[TokenSpan]) -> ParseResult<'_, Expression> {
     if let Ok((rest, _)) = token(Token::Not)(input) {
         let (rest, expr) = primary_expression(rest)?;
@@ -245,6 +318,9 @@ fn primary_expression(input: &[TokenSpan]) -> ParseResult<'_, Expression> {
     }
     if let Some(((Token::String(s), _), rest)) = input.split_first() {
         return Ok((rest, Expression::Literal(Literal::String(s.clone()))));
+    }
+    if let Ok((rest, expr)) = dict_or_set_literal(input) {
+        return Ok((rest, expr));
     }
     if let Ok((rest, _)) = token(Token::LBracket)(input) {
         let mut items = Vec::new();
@@ -917,6 +993,8 @@ fn token_text(token: &Token) -> String {
         Token::NewlineWithIndent => "\\n".to_string(),
         Token::Whitespace => " ".to_string(),
         Token::Comment => "#".to_string(),
+        Token::LBrace => "{".to_string(),
+        Token::RBrace => "}".to_string(),
         Token::Indent => "<indent>".to_string(),
         Token::Dedent => "<dedent>".to_string(),
     }
@@ -1537,6 +1615,48 @@ mut w = 10
                 }
                 _ => panic!("Expected Lambda"),
             },
+            _ => panic!("Expected Let statement"),
+        }
+    }
+
+    #[test]
+    fn test_parse_dict_literal() {
+        let input = "let d = {\"a\": 1, \"b\": 2}";
+        let lexer = Lexer::new(input);
+        let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
+        let (_, program) = parse_program(&tokens).unwrap();
+        match &program.statements[0].kind {
+            StatementKind::Let { value, .. } => {
+                assert!(matches!(value, Expression::Literal(Literal::Dict(pairs)) if pairs.len() == 2));
+            }
+            _ => panic!("Expected Let statement"),
+        }
+    }
+
+    #[test]
+    fn test_parse_set_literal() {
+        let input = "let s = {1, 2, 3}";
+        let lexer = Lexer::new(input);
+        let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
+        let (_, program) = parse_program(&tokens).unwrap();
+        match &program.statements[0].kind {
+            StatementKind::Let { value, .. } => {
+                assert!(matches!(value, Expression::Literal(Literal::Set(items)) if items.len() == 3));
+            }
+            _ => panic!("Expected Let statement"),
+        }
+    }
+
+    #[test]
+    fn test_parse_empty_dict_literal() {
+        let input = "let d = {}";
+        let lexer = Lexer::new(input);
+        let tokens: Vec<_> = lexer.map(|r| r.unwrap()).collect();
+        let (_, program) = parse_program(&tokens).unwrap();
+        match &program.statements[0].kind {
+            StatementKind::Let { value, .. } => {
+                assert!(matches!(value, Expression::Literal(Literal::Dict(pairs)) if pairs.is_empty()));
+            }
             _ => panic!("Expected Let statement"),
         }
     }

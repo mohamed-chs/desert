@@ -1562,9 +1562,18 @@ fn validate_expression(
             }
             Ok(())
         }
-        Expression::MacroCall(_, args) | Expression::Literal(crate::ast::Literal::List(args)) => {
+        Expression::MacroCall(_, args)
+        | Expression::Literal(crate::ast::Literal::List(args))
+        | Expression::Literal(crate::ast::Literal::Set(args)) => {
             for arg in args {
                 validate_expression(arg, offset, scopes, semantic_index, struct_fields)?;
+            }
+            Ok(())
+        }
+        Expression::Literal(crate::ast::Literal::Dict(pairs)) => {
+            for (k, v) in pairs {
+                validate_expression(k, offset, scopes, semantic_index, struct_fields)?;
+                validate_expression(v, offset, scopes, semantic_index, struct_fields)?;
             }
             Ok(())
         }
